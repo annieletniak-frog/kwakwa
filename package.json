@@ -9,7 +9,8 @@
     "dev": "NODE_ENV=development MAIL_MODE=console node server/index.js",
     "demo": "node scripts/setup-demo.js && NODE_ENV=development MAIL_MODE=console node server/index.js",
     "seed": "node scripts/seed.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "build:google": "node scripts/build-google.js"
   },
   "engines": {
     "node": ">=20"
