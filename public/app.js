@@ -1146,6 +1146,55 @@
     );
   }
 
+  // Без бота Slack: тимлид копирует готовый текст отбивки и сам вставляет его в тред четвергового напоминания.
+  // getReport — актуальный отчёт из редактора: текст собирается в момент нажатия, с учётом свежих комментариев.
+  function copyNotifyBlock(getReport) {
+    const firstName = getReport().authorName.split(' ')[0];
+    const btn = h('button', {
+      type: 'button',
+      class: 'btn btn--primary',
+      onclick: async () => {
+        if (state.dirty) {
+          toast('Сначала сохраните правки — райтер должен увидеть их по ссылке', 'error');
+          return;
+        }
+        const report = getReport();
+        const link = `${state.appUrl}?week=${report.week}`;
+        const comments = (report.comments || []).filter((c) => c.author !== report.author).length;
+        const lead = comments
+          ? `${firstName}, тимлид посмотрел твой отчёт и оставил комментарии (${comments}) — загляни в `
+          : `${firstName}, тимлид посмотрел твой отчёт — спасибо! Он в `;
+        const html = `${escapeText(lead)}<a href="${escapeText(link)}">Отчетник</a> 🩶`;
+        const text = `${lead}Отчетник 🩶 ${link}`;
+        let ok = false;
+        try {
+          if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+            await navigator.clipboard.write([new ClipboardItem({
+              'text/html': new Blob([html], { type: 'text/html' }),
+              'text/plain': new Blob([text], { type: 'text/plain' }),
+            })]);
+            ok = true;
+          }
+        } catch { ok = false; }
+        if (!ok) ok = copyTextNow(text);
+        toast(ok
+          ? `Отбивка скопирована. Вставьте её в тред четвергового напоминания и тегните райтера: @${firstName}`
+          : 'Не получилось скопировать — выделите текст отбивки ниже и скопируйте вручную', ok ? null : 'error', 9000);
+      },
+    }, '📋 Скопировать отбивку для Slack');
+    return h('div', { class: 'notify-row' },
+      btn,
+      h('span', { class: 'muted small', text: 'Готовый текст со ссылкой на отчёт — вставьте его в тред четвергового напоминания' }),
+    );
+  }
+
+  function escapeText(value) {
+    const div = document.createElement('div');
+    div.textContent = value;
+    // Кавычку кодируем как в адресах (%22): так значение безопасно внутри href.
+    return div.innerHTML.replace(/"/g, '%22');
+  }
+
   // ---------- Вкладка «Тимлид» ----------
 
   async function renderLead(token) {
@@ -1208,7 +1257,7 @@
             ),
             h('button', { type: 'button', class: 'btn', onclick: () => go({ tab: 'lead', week }) }, 'К общему отчёту'),
           ),
-          state.slack && selected.author !== state.user.email ? notifyBlock(selected) : null,
+          selected.author !== state.user.email ? (state.slack ? notifyBlock(selected) : copyNotifyBlock(() => ctx.report)) : null,
         ),
         removedList(selected),
         h('div', {}, editor.root),
@@ -1353,6 +1402,7 @@
       state.user = me.user;
       state.projects = me.projects;
       state.slack = Boolean(me.slack);
+      state.appUrl = me.appUrl || `${location.origin}${location.pathname}`;
       if (GAS) await applyStartParams();
       await render();
     } catch (err) {

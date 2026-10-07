@@ -230,7 +230,9 @@ function route_(method, url, body) {
   const user = currentUser_();
 
   if (p === '/api/config') return { devMail: false };
-  if (p === '/api/me' && method === 'GET') return { user, projects: team_().projects, slack: slackConfigured_() };
+  if (p === '/api/me' && method === 'GET') {
+    return { user, projects: team_().projects, slack: slackConfigured_(), appUrl: user.role === 'lead' ? appUrl_() : null };
+  }
 
   if (p === '/api/weeks' && method === 'GET') {
     const weeks = new Map();
