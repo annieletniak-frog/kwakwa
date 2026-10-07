@@ -186,11 +186,18 @@ function applySave(report, projectsInput, editor, options = {}) {
     ...report,
     projects,
     plan,
+    comments: liveComments({ projects, comments: report.comments }),
     removedByLead: removedByLead.slice(-LIMITS.removedLog),
     version: (report.version || 0) + 1,
     updatedAt: now,
     updatedBy: editor.email,
   };
+}
+
+// Комментарии живут, пока жива задача: при удалении задачи её комментарии тоже исчезают.
+function liveComments(report) {
+  const ids = indexTasks(report.projects || []);
+  return (report.comments || []).filter((c) => ids.has(c.taskId));
 }
 
 function findTask(report, taskId) {
@@ -308,6 +315,7 @@ module.exports = {
   reportHasTasks,
   applySave,
   findTask,
+  liveComments,
   cleanComment,
   buildSummary,
   summaryToHtml,

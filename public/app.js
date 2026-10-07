@@ -930,24 +930,9 @@
       }
       if (streams.length) blocks.push(h('div', { class: 'project' }, h('h2', { text: p.project || 'Проект не выбран' }), streams));
     }
-    const orphan = orphanComments(report);
     return h('div', {},
       blocks.length ? blocks : h('p', { class: 'muted', text: 'В отчёте нет заполненных задач.' }),
-      orphan,
       removedList(report),
-    );
-  }
-
-  function orphanComments(report) {
-    const ids = savedTaskIds(report);
-    const list = (report.comments || []).filter((c) => !ids.has(c.taskId));
-    if (!list.length) return null;
-    return h('div', { class: 'card' },
-      h('h3', { text: 'Комментарии к удалённым задачам' }),
-      list.map((c) => h('div', {},
-        h('p', { class: 'muted small', text: `К задаче «${c.taskText}»` }),
-        commentList([c]),
-      )),
     );
   }
 
@@ -1074,7 +1059,6 @@
       ),
       leadActivityNotice(data.report),
       data.report ? removedList(data.report) : null,
-      data.report ? orphanComments(data.report) : null,
       editor.root,
       editor.savebar,
     );
@@ -1180,7 +1164,6 @@
           state.slack && selected.author !== state.user.email ? notifyBlock(selected) : null,
         ),
         removedList(selected),
-        orphanComments(selected),
         h('div', {}, editor.root),
       );
     } else if (state.route.report) {

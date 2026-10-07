@@ -167,7 +167,7 @@ function createApp(options = {}) {
       plan: viewer && viewer.email === report.author ? report.plan || [] : undefined,
       authorName: nameOf(report.author),
       updatedByName: report.updatedBy ? nameOf(report.updatedBy) : null,
-      comments: (report.comments || []).map((c) => ({ ...c, authorName: nameOf(c.author) })),
+      comments: R.liveComments(report).map((c) => ({ ...c, authorName: nameOf(c.author) })),
       removedByLead: (report.removedByLead || []).map((r) => ({ ...r, byName: nameOf(r.by) })),
     };
   }

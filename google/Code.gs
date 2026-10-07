@@ -181,11 +181,18 @@ function applySave(report, projectsInput, editor, options = {}) {
     ...report,
     projects,
     plan,
+    comments: liveComments({ projects, comments: report.comments }),
     removedByLead: removedByLead.slice(-LIMITS.removedLog),
     version: (report.version || 0) + 1,
     updatedAt: now,
     updatedBy: editor.email,
   };
+}
+
+// Комментарии живут, пока жива задача: при удалении задачи её комментарии тоже исчезают.
+function liveComments(report) {
+  const ids = indexTasks(report.projects || []);
+  return (report.comments || []).filter((c) => ids.has(c.taskId));
 }
 
 function findTask(report, taskId) {
@@ -453,7 +460,7 @@ function present_(report, viewer) {
     plan: viewer && viewer.email === report.author ? report.plan || [] : undefined,
     authorName: nameOf_(report.author),
     updatedByName: report.updatedBy ? nameOf_(report.updatedBy) : null,
-    comments: (report.comments || []).map((c) => Object.assign({}, c, { authorName: nameOf_(c.author) })),
+    comments: liveComments(report).map((c) => Object.assign({}, c, { authorName: nameOf_(c.author) })),
     removedByLead: (report.removedByLead || []).map((r) => Object.assign({}, r, { byName: nameOf_(r.by) })),
   });
 }
@@ -798,7 +805,7 @@ function notifyWriter_(report, lead) {
   const writer = findUser_(report.author);
   const writerId = slackUserId_(report.author);
   const mention = writerId ? `<@${writerId}>` : (writer ? writer.name : report.author);
-  const leadComments = (report.comments || []).filter((c) => {
+  const leadComments = liveComments(report).filter((c) => {
     const u = findUser_(c.author);
     return u && u.role === 'lead';
   }).length;

@@ -159,7 +159,7 @@ function notifyWriter_(report, lead) {
   const writer = findUser_(report.author);
   const writerId = slackUserId_(report.author);
   const mention = writerId ? `<@${writerId}>` : (writer ? writer.name : report.author);
-  const leadComments = (report.comments || []).filter((c) => {
+  const leadComments = liveComments(report).filter((c) => {
     const u = findUser_(c.author);
     return u && u.role === 'lead';
   }).length;
