@@ -304,6 +304,32 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
 
 .add-row { margin-top: 4px; }
 
+.guide {
+  background: var(--progress-soft);
+  border: 1px solid var(--progress);
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+}
+.guide__summary {
+  cursor: pointer;
+  padding: 14px 18px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text);
+  list-style-position: inside;
+}
+.guide__summary:focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--radius); }
+.guide[open] .guide__summary { border-bottom: 1px solid var(--border); }
+.guide__body { padding: 4px 18px 18px; }
+.guide__rules { margin: 12px 0; padding-left: 22px; }
+.guide__rules li { margin: 6px 0; }
+.guide__examples { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.guide__example { background: var(--surface); border-radius: 8px; padding: 12px 14px; border-left: 4px solid var(--done); font-size: 0.92rem; }
+.guide__example--bad { border-left-color: var(--block); }
+.guide__example-title { font-weight: 700; margin-bottom: 6px; }
+.guide__example ul { margin: 0; padding-left: 18px; }
+.guide__example li { margin: 4px 0; }
+
 .plan { border-left: 4px solid var(--primary); }
 .plan h2 { margin-bottom: 4px; }
 .plan > p { margin: 0 0 12px; }
@@ -412,6 +438,7 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
   .lead-grid { grid-template-columns: 1fr; }
   .task__row { flex-wrap: wrap; }
   .task__row input.task__due { width: 100%; order: 3; }
+  .guide__examples { grid-template-columns: 1fr; }
   .plan-row { flex-wrap: wrap; }
   .plan-row input.plan-row__date { width: auto; flex: 1 1 100%; }
   .plan-row textarea { flex: 1 1 100%; }
