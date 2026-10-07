@@ -5,6 +5,7 @@
     { key: 'done', title: 'Завершено', placeholder: 'Что сделано за неделю' },
     { key: 'blockers', title: 'Блокеры', placeholder: 'Что мешает и чего не хватает' },
     { key: 'progress', title: 'Что в работе', placeholder: 'Над чем работаете сейчас' },
+    { key: 'meetings', title: 'Важные встречи и обсуждения', placeholder: 'Встреча или обсуждение и его итог' },
   ];
   const ROLE_NAMES = { writer: 'Райтер', lead: 'Тимлид' };
   const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
@@ -349,7 +350,7 @@
     return { id: uid(), text: '', due: '' };
   }
   function emptyStream() {
-    return { id: uid(), name: '', sections: { done: [emptyTask()], blockers: [emptyTask()], progress: [emptyTask()] } };
+    return { id: uid(), name: '', sections: Object.fromEntries(SECTIONS.map(({ key }) => [key, [emptyTask()]])) };
   }
   function emptyProject() {
     return { id: uid(), project: '', streams: [emptyStream()] };
@@ -384,10 +385,15 @@
     return project.streams.some((s) => s.name.trim() || SECTIONS.some(({ key }) => s.sections[key].some((t) => t.text.trim())));
   }
 
+  // В отчётах, сохранённых до появления нового раздела, его может не быть.
+  function tasksOf(stream, key) {
+    return (stream.sections && stream.sections[key]) || [];
+  }
+
   function savedTaskIds(report) {
     const ids = new Set();
     if (!report) return ids;
-    for (const p of report.projects) for (const s of p.streams) for (const { key } of SECTIONS) for (const t of s.sections[key]) ids.add(t.id);
+    for (const p of report.projects) for (const s of p.streams) for (const { key } of SECTIONS) for (const t of tasksOf(s, key)) ids.add(t.id);
     return ids;
   }
 
@@ -742,9 +748,9 @@
     for (const p of report.projects) {
       const streams = [];
       for (const s of p.streams) {
-        const sections = SECTIONS.filter(({ key }) => s.sections[key].length).map(({ key, title }) => h('div', { class: `section section--${key}` },
+        const sections = SECTIONS.filter(({ key }) => tasksOf(s, key).length).map(({ key, title }) => h('div', { class: `section section--${key}` },
           h('div', { class: 'section__title', text: title }),
-          h('ul', { class: 'stack-sm' }, s.sections[key].map((t) => h('li', {},
+          h('ul', { class: 'stack-sm' }, tasksOf(s, key).map((t) => h('li', {},
             h('span', { class: 'readonly-task', text: t.text }),
             t.due ? h('span', { class: 'readonly-due', text: ` · срок: ${t.due}` }) : null,
             t.leadEdit ? h('div', { class: 'task__meta' }, editMark(t)) : null,
@@ -795,7 +801,7 @@
   function leadActivityNotice(report) {
     if (!report || report.author !== state.user.email) return null;
     let edits = 0;
-    for (const p of report.projects) for (const s of p.streams) for (const { key } of SECTIONS) for (const t of s.sections[key]) if (t.leadEdit) edits += 1;
+    for (const p of report.projects) for (const s of p.streams) for (const { key } of SECTIONS) for (const t of tasksOf(s, key)) if (t.leadEdit) edits += 1;
     const comments = (report.comments || []).filter((c) => c.author !== state.user.email).length;
     if (!edits && !comments && !(report.removedByLead || []).length) return null;
     const parts = [];

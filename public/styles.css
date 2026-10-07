@@ -260,10 +260,12 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
 .section--done { background: var(--done-soft); }
 .section--blockers { background: var(--block-soft); }
 .section--progress { background: var(--progress-soft); }
+.section--meetings { background: var(--primary-soft); }
 .section__title { font-weight: 700; font-size: 0.95rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 .section--done .section__title { color: var(--done); }
 .section--blockers .section__title { color: var(--block); }
 .section--progress .section__title { color: var(--progress); }
+.section--meetings .section__title { color: var(--primary); }
 
 .task { padding: 6px 0; }
 .task + .task { border-top: 1px dashed rgba(127, 127, 127, 0.25); }

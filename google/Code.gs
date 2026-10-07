@@ -1,7 +1,12 @@
 // Отчётник — версия для Google Apps Script. Файл собран автоматически (npm run build:google), не редактируйте вручную.
 
-const SECTIONS = ['done', 'blockers', 'progress'];
-const SECTION_TITLES = { done: 'Завершено', blockers: 'Блокеры', progress: 'Что в работе' };
+const SECTIONS = ['done', 'blockers', 'progress', 'meetings'];
+const SECTION_TITLES = {
+  done: 'Завершено',
+  blockers: 'Блокеры',
+  progress: 'Что в работе',
+  meetings: 'Важные встречи и обсуждения',
+};
 const LIMITS = {
   projects: 20,
   streamsPerProject: 30,
@@ -84,7 +89,8 @@ function indexTasks(projects) {
   for (const p of projects) {
     for (const s of p.streams) {
       for (const key of SECTIONS) {
-        for (const t of s.sections[key]) map.set(t.id, { task: t, section: key, project: p.project, stream: s.name });
+        // В отчётах, сохранённых до появления раздела, его может не быть.
+        for (const t of s.sections[key] || []) map.set(t.id, { task: t, section: key, project: p.project, stream: s.name });
       }
     }
   }
@@ -190,7 +196,7 @@ function buildSummary(reports, projectOrder = []) {
       for (const s of p.streams || []) {
         const key = streamKey(s.name || '');
         if (!streams.has(key)) {
-          streams.set(key, { name: (s.name || '').trim(), done: [], blockers: [], progress: [] });
+          streams.set(key, { name: (s.name || '').trim(), ...Object.fromEntries(SECTIONS.map((k) => [k, []])) });
         }
         const target = streams.get(key);
         for (const section of SECTIONS) {

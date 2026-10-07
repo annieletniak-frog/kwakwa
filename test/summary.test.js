@@ -32,6 +32,7 @@ test('общий отчёт объединяет записи по проект�
     done: ['Онбординг'],
     blockers: ['Ждём юристов'],
     progress: ['Кэш-игры (срок: 15.10)'],
+    meetings: [],
   });
 
   const html = summaryToHtml(tree);
@@ -63,4 +64,15 @@ test('неделя — только понедельник', () => {
   assert.equal(isWeekId('2026-10-06'), false);
   assert.equal(isWeekId('2026-02-30'), false);
   assert.equal(isWeekId('../../x'), false);
+});
+
+test('раздел «Важные встречи и обсуждения» выводится последним и читается из старых отчётов', () => {
+  const withMeeting = report('a', [{ project: 'WL', streams: [{ name: 'S', sections: { done: [task('Готово')], meetings: [task('Синк с продуктом: договорились о терминах')] } }] }]);
+  // Отчёт, сохранённый до появления раздела: ключа meetings нет совсем.
+  const legacy = { author: 'b', projects: [{ project: 'WL', streams: [{ name: 's', sections: { done: [{ id: 'x1', text: 'Старое' }], blockers: [], progress: [] } }] }] };
+  const tree = buildSummary([withMeeting, legacy], order);
+  assert.deepEqual(tree[0].streams[0].done, ['Готово', 'Старое']);
+  const html = summaryToHtml(tree);
+  assert.match(html, /<p><strong>Завершено<\/strong><\/p>\n<ul>.*<\/ul>\n<p><strong>Важные встречи и обсуждения<\/strong><\/p>\n<ul><li>Синк с продуктом: договорились о терминах<\/li><\/ul>/);
+  assert.doesNotThrow(() => applySave(legacy, legacy.projects, { email: 'lead', role: 'lead' }));
 });
