@@ -420,6 +420,7 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
   .task__row input.task__due { width: 100%; order: 3; }
   .plan-row { flex-wrap: wrap; }
   .plan-row input.plan-row__date { width: auto; flex: 1 1 100%; }
+  .plan-row textarea { flex: 1 1 100%; }
   .week-nav__label { min-width: 0; }
   .project, .card { padding: 14px; }
   .stream { padding-left: 10px; }
@@ -948,6 +949,40 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
       : 'Календарь открыт. Нажмите на время → «Задача» и введите название', null, 8000);
   }
 
+  // Событие Google Календарь умеет создавать по ссылке сразу с названием и датой (на весь день).
+  function addEventToCalendar(item) {
+    const text = item.text.trim();
+    if (!text) {
+      toast('Сначала напишите задачу', 'error');
+      return;
+    }
+    const params = new URLSearchParams({ action: 'TEMPLATE', text, details: 'Из плана на неделю в Отчётнике' });
+    if (item.date) {
+      const [y, m, d] = item.date.split('-').map(Number);
+      const next = toId(new Date(y, m - 1, d + 1));
+      params.set('dates', `${item.date.replace(/-/g, '')}/${next.replace(/-/g, '')}`);
+    }
+    window.open(`https://calendar.google.com/calendar/render?${params}`, '_blank', 'noopener');
+    toast(item.date ? 'Проверьте событие в календаре и нажмите «Сохранить»' : 'День не выбран: укажите дату в календаре и нажмите «Сохранить»', null, 6000);
+  }
+
+  function calendarButtons(item, week, extraClass) {
+    return [
+      h('button', {
+        type: 'button',
+        class: `btn btn--sm ${extraClass || ''}`,
+        title: 'Скопировать текст и открыть календарь, чтобы создать запись типа «Задача»',
+        onclick: () => addToCalendar(item, week),
+      }, '📋 Задачей'),
+      h('button', {
+        type: 'button',
+        class: `btn btn--sm ${extraClass || ''}`,
+        title: 'Создать в Google Календаре событие с этим названием и датой',
+        onclick: () => addEventToCalendar(item),
+      }, '📅 Событием'),
+    ];
+  }
+
   function planReadonly(report, week) {
     const list = (report.plan || []).filter((t) => t.text);
     if (!list.length) return null;
@@ -957,7 +992,7 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
       h('ul', { class: 'plan-list' }, list.map((t) => h('li', {},
         t.date ? h('span', { class: 'plan-list__date', text: formatDay(t.date) }) : null,
         h('span', { class: 'readonly-task', text: t.text }),
-        h('button', { type: 'button', class: 'btn btn--link btn--sm', title: 'Добавить в Google Календарь', onclick: () => addToCalendar(t, week) }, '📅 В календарь'),
+        calendarButtons(t, week, 'btn--link'),
       ))),
     );
   }
@@ -1223,7 +1258,7 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
       const sunday = toId(new Date(y, m - 1, d + 6));
       return h('section', { class: 'project plan', 'aria-label': 'План на неделю' },
         h('h2', { text: '📅 План на неделю' }),
-        h('p', { class: 'muted small', text: 'Задачи для себя: план виден только вам и не попадает в общий отчёт. Кнопка «В календарь» копирует задачу и открывает Google Календарь на нужный день.' }),
+        h('p', { class: 'muted small', text: 'Задачи для себя: план виден только вам и не попадает в общий отчёт. В Google Календарь: «Задачей» — скопирует текст и откроет нужный день, «Событием» — создаст событие с названием и датой.' }),
         plan.map((item) => h('div', { class: 'plan-row' },
           h('input', {
             type: 'date',
@@ -1242,12 +1277,7 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
             value: item.text,
             oninput: (e) => { item.text = e.target.value; autosize(e.target); changed(); },
           }),
-          h('button', {
-            type: 'button',
-            class: 'btn btn--sm',
-            title: 'Добавить в Google Календарь',
-            onclick: () => addToCalendar(item, ctx.week),
-          }, '📅 В календарь'),
+          calendarButtons(item, ctx.week),
           h('button', {
             type: 'button',
             class: 'icon-btn',

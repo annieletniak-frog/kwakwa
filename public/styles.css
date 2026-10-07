@@ -412,6 +412,7 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
   .task__row input.task__due { width: 100%; order: 3; }
   .plan-row { flex-wrap: wrap; }
   .plan-row input.plan-row__date { width: auto; flex: 1 1 100%; }
+  .plan-row textarea { flex: 1 1 100%; }
   .week-nav__label { min-width: 0; }
   .project, .card { padding: 14px; }
   .stream { padding-left: 10px; }
