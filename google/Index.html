@@ -457,6 +457,17 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script>
+setTimeout(function () {
+  var app = document.getElementById('app');
+  if (!app || app.textContent.trim() !== 'Загрузка…') return;
+  app.innerHTML = '<div class="card"><h2>Отчётник не загрузился</h2>' +
+    '<p>Чаще всего так бывает, когда в браузере открыто несколько Google-аккаунтов. Попробуйте:</p>' +
+    '<ol><li>Открыть ссылку в окне инкогнито (Ctrl+Shift+N, на Mac ⌘+Shift+N) и войти только рабочим аккаунтом.</li>' +
+    '<li>Или выйти из личного Google-аккаунта в этом браузере, либо завести для работы отдельный профиль Chrome.</li></ol>' +
+    '<p>Если не помогло — сообщите тимлиду: возможно, приложение нужно заново разрешить после обновления.</p></div>';
+}, 20000);
+</script>
+<script>
 (() => {
   'use strict';
 
