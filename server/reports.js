@@ -19,6 +19,7 @@ const LIMITS = {
   comment: 2000,
   commentsPerReport: 1000,
   removedLog: 100,
+  planItems: 50,
 };
 const ID_RE = /^[A-Za-z0-9_-]{6,40}$/;
 
@@ -102,10 +103,33 @@ function indexTasks(projects) {
   return map;
 }
 
+// План на неделю: личные задачи райтера для календаря. В общий отчёт не попадают и видны только автору.
+function sanitizePlan(input) {
+  if (!Array.isArray(input)) return [];
+  if (input.length > LIMITS.planItems) throw new ValidationError('Слишком много задач в плане');
+  const used = new Set();
+  return input
+    .map((t) => {
+      const date = typeof (t && t.date) === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.date) ? t.date : '';
+      return { id: takeId(t && t.id, used), text: cleanMultiline(t && t.text, LIMITS.taskText), date };
+    })
+    .filter((t) => t.text);
+}
+
+function reportHasTasks(report) {
+  return (report.projects || []).some((p) => (p.streams || []).some((s) =>
+    SECTIONS.some((k) => ((s.sections && s.sections[k]) || []).length)));
+}
+
 // Применяет сохранение к отчёту. Если сохраняет тимлид чужой отчёт — помечаем
 // добавленные и изменённые задачи и запоминаем удалённые, чтобы райтер увидел правки.
-function applySave(report, projectsInput, editor, now = new Date().toISOString()) {
+function applySave(report, projectsInput, editor, options = {}) {
+  const now = options.now || new Date().toISOString();
   const projects = sanitizeProjects(projectsInput);
+  // План меняет только автор; при сохранении тимлидом он остаётся как был.
+  const plan = editor.email === report.author && options.plan !== undefined
+    ? sanitizePlan(options.plan)
+    : report.plan || [];
   const before = indexTasks(report.projects || []);
   const leadEdit = editor.role === 'lead' && editor.email !== report.author;
   const seen = new Set();
@@ -161,6 +185,7 @@ function applySave(report, projectsInput, editor, now = new Date().toISOString()
   return {
     ...report,
     projects,
+    plan,
     removedByLead: removedByLead.slice(-LIMITS.removedLog),
     version: (report.version || 0) + 1,
     updatedAt: now,
@@ -279,6 +304,8 @@ module.exports = {
   newId,
   isWeekId,
   sanitizeProjects,
+  sanitizePlan,
+  reportHasTasks,
   applySave,
   findTask,
   cleanComment,

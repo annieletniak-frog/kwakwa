@@ -282,3 +282,34 @@ test('неделя проверяется, статика отдаётся с з
     server.close();
   }
 });
+
+test('план на неделю: виден только автору, не попадает в общий отчёт, переживает правки тимлида', async () => {
+  const env = setup();
+  const { server, base } = await env.start();
+  try {
+    const anna = await login(env, base, 'anna@example.com');
+    const lead = await login(env, base, 'lead@example.com');
+    const plan = [{ text: 'Подготовить глоссарий', date: '2026-10-07' }, { text: '  ' }, { text: 'Созвон', date: 'не дата' }];
+
+    // Только план, без задач отчёта: тимлиду отчёт не засчитывается как заполненный.
+    const onlyPlan = await anna.call('PUT', `/api/my-report?week=${WEEK}`, { version: 0, projects: [], plan });
+    assert.equal(onlyPlan.status, 200);
+    assert.deepEqual(onlyPlan.data.report.plan.map((t) => [t.text, t.date]), [['Подготовить глоссарий', '2026-10-07'], ['Созвон', '']]);
+    const team = (await lead.call('GET', `/api/reports?week=${WEEK}`)).data.team;
+    assert.equal(team.find((m) => m.email === 'anna@example.com').reportId, null);
+
+    const saved = (await anna.call('PUT', `/api/my-report?week=${WEEK}`, { version: 1, projects: sampleProjects(), plan: onlyPlan.data.report.plan })).data.report;
+    const leadView = (await lead.call('GET', `/api/reports/${saved.id}`)).data.report;
+    assert.equal(leadView.plan, undefined, 'тимлид план не видит');
+
+    const leadSave = await lead.call('PUT', `/api/reports/${saved.id}`, { version: saved.version, projects: leadView.projects, plan: [] });
+    assert.equal(leadSave.status, 200);
+    const mine = (await anna.call('GET', `/api/my-report?week=${WEEK}`)).data.report;
+    assert.equal(mine.plan.length, 2, 'тимлид не может изменить или стереть план');
+
+    const summary = (await lead.call('GET', `/api/summary?week=${WEEK}`)).data;
+    assert.doesNotMatch(summary.text, /глоссарий|Созвон/);
+  } finally {
+    server.close();
+  }
+});

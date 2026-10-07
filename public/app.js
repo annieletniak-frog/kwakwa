@@ -56,12 +56,12 @@
   }
 
   let toastTimer = null;
-  function toast(message, kind) {
+  function toast(message, kind, durationMs) {
     toastEl.textContent = message;
     toastEl.className = kind === 'error' ? 'toast toast--error' : 'toast';
     toastEl.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toastEl.hidden = true; }, kind === 'error' ? 6000 : 3500);
+    toastTimer = setTimeout(() => { toastEl.hidden = true; }, durationMs || (kind === 'error' ? 6000 : 3500));
   }
 
   // Версия для Google Apps Script: те же запросы уходят в серверную функцию api() через google.script.run,
@@ -439,11 +439,80 @@
     )));
   }
 
+  // ---------- План на неделю и календарь ----------
+
+  function emptyPlanItem() {
+    return { id: uid(), text: '', date: '' };
+  }
+
+  function planFromReport(report) {
+    const plan = report && report.plan && report.plan.length ? clone(report.plan) : [];
+    if (!plan.length) plan.push(emptyPlanItem());
+    return plan;
+  }
+
+  function formatDay(id) {
+    const d = fromId(id);
+    const days = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+    return `${days[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  }
+
+  function copyTextNow(text) {
+    // Синхронное копирование работает и внутри окна Google Apps Script, где буфер обмена бывает закрыт.
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.left = '-9999px';
+    document.body.append(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    area.remove();
+    if (!ok && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {});
+      ok = true;
+    }
+    return ok;
+  }
+
+  // Google не даёт внешним страницам создавать в календаре запись типа «Задача», поэтому копируем текст
+  // и открываем календарь на нужном дне: остаётся выбрать время, тип «Задача» и вставить название.
+  function addToCalendar(item, week) {
+    const text = item.text.trim();
+    if (!text) {
+      toast('Сначала напишите задачу', 'error');
+      return;
+    }
+    const [y, m, d] = (item.date || week).split('-').map(Number);
+    const copied = copyTextNow(text);
+    window.open(`https://calendar.google.com/calendar/r/day/${y}/${m}/${d}`, '_blank', 'noopener');
+    toast(copied
+      ? 'Текст скопирован. В календаре нажмите на время → «Задача» → вставьте название (Ctrl+V / ⌘V)'
+      : 'Календарь открыт. Нажмите на время → «Задача» и введите название', null, 8000);
+  }
+
+  function planReadonly(report, week) {
+    const list = (report.plan || []).filter((t) => t.text);
+    if (!list.length) return null;
+    return h('div', { class: 'project plan' },
+      h('h2', { text: 'План на неделю' }),
+      h('p', { class: 'muted small', text: 'Виден только вам и не попадает в общий отчёт.' }),
+      h('ul', { class: 'plan-list' }, list.map((t) => h('li', {},
+        t.date ? h('span', { class: 'plan-list__date', text: formatDay(t.date) }) : null,
+        h('span', { class: 'readonly-task', text: t.text }),
+        h('button', { type: 'button', class: 'btn btn--link btn--sm', title: 'Добавить в Google Календарь', onclick: () => addToCalendar(t, week) }, '📅 В календарь'),
+      ))),
+    );
+  }
+
   // ---------- Редактор отчёта ----------
   // ctx: { report, mode: 'own' | 'lead', saveUrl, onSaved(report), onReloaded() }
 
   function createEditor(ctx) {
     let model = modelFromReport(ctx.report);
+    // План есть только в собственном отчёте во вкладке «Райтер».
+    let plan = ctx.withPlan ? planFromReport(ctx.report) : null;
     const root = h('div', { class: 'editor' });
     const statusEl = h('span', { class: 'savebar__status' });
     const saveBtn = h('button', { type: 'button', class: 'btn btn--primary btn--lg', onclick: save }, 'Сохранить');
@@ -663,7 +732,9 @@
         );
       });
 
-      mount(root, 
+      mount(root,
+        plan ? planBlock() : null,
+        plan ? h('h2', { class: 'editor-heading', text: 'Отчёт за неделю' }) : null,
         ...projectBlocks,
         h('button', {
           type: 'button',
@@ -678,12 +749,71 @@
       // Фокус ставим сразу, чтобы не потерять первые нажатия; высоту полей — после отрисовки.
       if (focusAfterRender) {
         const [kind, id] = focusAfterRender.split(':');
-        const selector = { task: `[data-task="${id}"]`, stream: `[data-stream="${id}"]`, comment: `[data-comment="${id}"]` }[kind];
+        const selector = {
+          task: `[data-task="${id}"]`,
+          stream: `[data-stream="${id}"]`,
+          comment: `[data-comment="${id}"]`,
+          plan: `[data-plan="${id}"]`,
+        }[kind];
         const target = selector ? root.querySelector(selector) : [...root.querySelectorAll('select')].find((el) => el.dataset.project === id);
         if (target) target.focus();
         focusAfterRender = null;
       }
       requestAnimationFrame(() => root.querySelectorAll('textarea').forEach(autosize));
+    }
+
+    function planBlock() {
+      const [y, m, d] = ctx.week.split('-').map(Number);
+      const sunday = toId(new Date(y, m - 1, d + 6));
+      return h('section', { class: 'project plan', 'aria-label': 'План на неделю' },
+        h('h2', { text: '📅 План на неделю' }),
+        h('p', { class: 'muted small', text: 'Задачи для себя: план виден только вам и не попадает в общий отчёт. Кнопка «В календарь» копирует задачу и открывает Google Календарь на нужный день.' }),
+        plan.map((item) => h('div', { class: 'plan-row' },
+          h('input', {
+            type: 'date',
+            class: 'plan-row__date',
+            'aria-label': 'День',
+            min: ctx.week,
+            max: sunday,
+            value: item.date,
+            onchange: (e) => { item.date = e.target.value; changed(); },
+          }),
+          h('textarea', {
+            rows: '1',
+            'data-plan': item.id,
+            'aria-label': 'Запланированная задача',
+            placeholder: 'Что планируете сделать',
+            value: item.text,
+            oninput: (e) => { item.text = e.target.value; autosize(e.target); changed(); },
+          }),
+          h('button', {
+            type: 'button',
+            class: 'btn btn--sm',
+            title: 'Добавить в Google Календарь',
+            onclick: () => addToCalendar(item, ctx.week),
+          }, '📅 В календарь'),
+          h('button', {
+            type: 'button',
+            class: 'icon-btn',
+            title: 'Удалить из плана',
+            'aria-label': 'Удалить из плана',
+            onclick: () => structural(() => {
+              plan.splice(plan.indexOf(item), 1);
+              if (!plan.length) plan.push(emptyPlanItem());
+            }),
+          }, '×'),
+        )),
+        h('div', { class: 'add-row' },
+          h('button', {
+            type: 'button',
+            class: 'btn btn--link btn--sm',
+            onclick: () => {
+              const item = emptyPlanItem();
+              structural(() => plan.push(item), `plan:${item.id}`);
+            },
+          }, '+ Добавить задачу в план'),
+        ),
+      );
     }
 
     async function save() {
@@ -699,9 +829,14 @@
       }
       saveBtn.disabled = true;
       try {
-        const data = await api('PUT', ctx.saveUrl(), { version: ctx.report ? ctx.report.version : 0, projects: modelToPayload(model) });
+        const data = await api('PUT', ctx.saveUrl(), {
+          version: ctx.report ? ctx.report.version : 0,
+          projects: modelToPayload(model),
+          plan: plan ? plan.map((t) => ({ id: t.id, text: t.text, date: t.date })) : undefined,
+        });
         ctx.report = data.report;
         model = modelFromReport(ctx.report);
+        if (plan) plan = planFromReport(ctx.report);
         setDirty(false);
         draw();
         if (ctx.onSaved) ctx.onSaved(ctx.report);
@@ -893,6 +1028,8 @@
     const ctx = {
       report: data.report,
       mode: 'own',
+      withPlan: true,
+      week,
       saveUrl: () => `/api/my-report?week=${week}`,
       onSaved: () => {},
       onReloaded: () => render(),
@@ -1037,6 +1174,8 @@
     const content = [];
     if (summary) content.push(summaryCard(summary, `Общий отчёт · ${weekLabel(week)}`));
     for (const report of list.reports) {
+      // Чужой отчёт, в котором есть только личный план, тимлиду показывать нечего.
+      if (report.author !== state.user.email && !savedTaskIds(report).size) continue;
       const editRoute = report.author === state.user.email
         ? { tab: 'writer', week }
         : { tab: 'lead', week, report: report.id };
@@ -1049,6 +1188,7 @@
           h('button', { type: 'button', class: 'btn', onclick: () => go(editRoute) }, 'Открыть для правки'),
         ),
         leadActivityNotice(report),
+        report.author === state.user.email ? planReadonly(report, week) : null,
         readonlyReport(report),
       );
       content.push(state.user.role === 'lead'

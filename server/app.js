@@ -160,9 +160,11 @@ function createApp(options = {}) {
     return user.role === 'lead' || report.author === user.email;
   }
 
-  function present(report) {
+  // План на неделю личный: его получает только автор отчёта.
+  function present(report, viewer) {
     return {
       ...report,
+      plan: viewer && viewer.email === report.author ? report.plan || [] : undefined,
       authorName: nameOf(report.author),
       updatedByName: report.updatedBy ? nameOf(report.updatedBy) : null,
       comments: (report.comments || []).map((c) => ({ ...c, authorName: nameOf(c.author) })),
@@ -198,7 +200,7 @@ function createApp(options = {}) {
     }
     let updated;
     try {
-      updated = R.applySave(report, input.projects, user);
+      updated = R.applySave(report, input.projects, user, { plan: input.plan });
     } catch (err) {
       if (err instanceof R.ValidationError) throw new HttpError(400, err.message);
       throw err;
@@ -261,11 +263,12 @@ function createApp(options = {}) {
 
     if (p === '/api/reports' && method === 'GET') {
       const week = requireWeek(url.searchParams.get('week'));
-      const reports = weekReportsSorted(week).filter((r) => canSee(user, r)).map(present);
+      const reports = weekReportsSorted(week).filter((r) => canSee(user, r)).map((r) => present(r, user));
       const body = { week, reports };
       if (user.role === 'lead') {
         body.team = team.members().map((m) => {
-          const r = reports.find((x) => x.author === m.email);
+          // Отчёт с одним только планом не считается заполненным.
+          const r = reports.find((x) => x.author === m.email && R.reportHasTasks(x));
           return { ...m, reportId: r ? r.id : null, updatedAt: r ? r.updatedAt : null };
         });
       }
@@ -275,7 +278,7 @@ function createApp(options = {}) {
     if (p === '/api/my-report') {
       const week = requireWeek(url.searchParams.get('week'));
       const existing = findOwnReport(user.email, week);
-      if (method === 'GET') return send(res, 200, { report: existing ? present(existing) : null });
+      if (method === 'GET') return send(res, 200, { report: existing ? present(existing, user) : null });
       if (method === 'PUT') {
         const body = await readBody(req);
         const now = new Date().toISOString();
@@ -290,7 +293,7 @@ function createApp(options = {}) {
           removedByLead: [],
         };
         const saved = saveReport(base, body, user);
-        return send(res, 200, { report: present(saved) });
+        return send(res, 200, { report: present(saved, user) });
       }
     }
 
@@ -311,10 +314,10 @@ function createApp(options = {}) {
     let m = p.match(/^\/api\/reports\/([A-Za-z0-9_-]+)$/);
     if (m) {
       const report = getVisibleReport(user, m[1]);
-      if (method === 'GET') return send(res, 200, { report: present(report) });
+      if (method === 'GET') return send(res, 200, { report: present(report, user) });
       if (method === 'PUT') {
         const body = await readBody(req);
-        return send(res, 200, { report: present(saveReport(report, body, user)) });
+        return send(res, 200, { report: present(saveReport(report, body, user), user) });
       }
     }
 
@@ -337,7 +340,7 @@ function createApp(options = {}) {
         createdAt: new Date().toISOString(),
       });
       db.save();
-      return send(res, 200, { report: present(report) });
+      return send(res, 200, { report: present(report, user) });
     }
 
     m = p.match(/^\/api\/reports\/([A-Za-z0-9_-]+)\/comments\/([A-Za-z0-9_-]+)$/);
@@ -348,7 +351,7 @@ function createApp(options = {}) {
       if (comment.author !== user.email) throw new HttpError(403, 'Удалить можно только свой комментарий');
       report.comments = report.comments.filter((c) => c.id !== m[2]);
       db.save();
-      return send(res, 200, { report: present(report) });
+      return send(res, 200, { report: present(report, user) });
     }
 
     throw new HttpError(404, 'Не найдено');

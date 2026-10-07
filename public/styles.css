@@ -194,7 +194,7 @@ label.field { display: block; }
 .field__label { display: block; font-weight: 600; font-size: 0.875rem; margin-bottom: 6px; }
 .field__hint { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
 
-input[type="text"], input[type="email"], select, textarea {
+input[type="text"], input[type="email"], input[type="date"], select, textarea {
   width: 100%;
   font: inherit;
   color: var(--text);
@@ -303,6 +303,18 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
 .comment-form textarea { flex: 1; min-height: 38px; }
 
 .add-row { margin-top: 4px; }
+
+.plan { border-left: 4px solid var(--primary); }
+.plan h2 { margin-bottom: 4px; }
+.plan > p { margin: 0 0 12px; }
+.plan-row { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; }
+.plan-row textarea { flex: 1; }
+.plan-row .btn { min-height: 42px; }
+.plan-row input.plan-row__date { width: 160px; flex: none; }
+.plan-list { margin: 0; padding-left: 20px; }
+.plan-list li { margin: 4px 0; }
+.plan-list__date { color: var(--primary); font-weight: 600; font-size: 0.85rem; margin-right: 8px; }
+.editor-heading { margin: 28px 0 12px; }
 .add-project { margin-top: 20px; width: 100%; border: 2px dashed var(--border); background: transparent; color: var(--primary); padding: 14px; }
 .add-project:hover { border-color: var(--primary); background: var(--primary-soft); }
 
@@ -398,6 +410,8 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
   .lead-grid { grid-template-columns: 1fr; }
   .task__row { flex-wrap: wrap; }
   .task__row input.task__due { width: 100%; order: 3; }
+  .plan-row { flex-wrap: wrap; }
+  .plan-row input.plan-row__date { width: auto; flex: 1 1 100%; }
   .week-nav__label { min-width: 0; }
   .project, .card { padding: 14px; }
   .stream { padding-left: 10px; }

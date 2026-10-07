@@ -17,6 +17,7 @@ const LIMITS = {
   comment: 2000,
   commentsPerReport: 1000,
   removedLog: 100,
+  planItems: 50,
 };
 const ID_RE = /^[A-Za-z0-9_-]{6,40}$/;
 
@@ -97,10 +98,33 @@ function indexTasks(projects) {
   return map;
 }
 
+// План на неделю: личные задачи райтера для календаря. В общий отчёт не попадают и видны только автору.
+function sanitizePlan(input) {
+  if (!Array.isArray(input)) return [];
+  if (input.length > LIMITS.planItems) throw new ValidationError('Слишком много задач в плане');
+  const used = new Set();
+  return input
+    .map((t) => {
+      const date = typeof (t && t.date) === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.date) ? t.date : '';
+      return { id: takeId(t && t.id, used), text: cleanMultiline(t && t.text, LIMITS.taskText), date };
+    })
+    .filter((t) => t.text);
+}
+
+function reportHasTasks(report) {
+  return (report.projects || []).some((p) => (p.streams || []).some((s) =>
+    SECTIONS.some((k) => ((s.sections && s.sections[k]) || []).length)));
+}
+
 // Применяет сохранение к отчёту. Если сохраняет тимлид чужой отчёт — помечаем
 // добавленные и изменённые задачи и запоминаем удалённые, чтобы райтер увидел правки.
-function applySave(report, projectsInput, editor, now = new Date().toISOString()) {
+function applySave(report, projectsInput, editor, options = {}) {
+  const now = options.now || new Date().toISOString();
   const projects = sanitizeProjects(projectsInput);
+  // План меняет только автор; при сохранении тимлидом он остаётся как был.
+  const plan = editor.email === report.author && options.plan !== undefined
+    ? sanitizePlan(options.plan)
+    : report.plan || [];
   const before = indexTasks(report.projects || []);
   const leadEdit = editor.role === 'lead' && editor.email !== report.author;
   const seen = new Set();
@@ -156,6 +180,7 @@ function applySave(report, projectsInput, editor, now = new Date().toISOString()
   return {
     ...report,
     projects,
+    plan,
     removedByLead: removedByLead.slice(-LIMITS.removedLog),
     version: (report.version || 0) + 1,
     updatedAt: now,
@@ -421,8 +446,10 @@ function canSee_(user, report) {
   return user.role === 'lead' || report.author === user.email;
 }
 
-function present_(report) {
+// План на неделю личный: его получает только автор отчёта.
+function present_(report, viewer) {
   return Object.assign({}, report, {
+    plan: viewer && viewer.email === report.author ? report.plan || [] : undefined,
     authorName: nameOf_(report.author),
     updatedByName: report.updatedBy ? nameOf_(report.updatedBy) : null,
     comments: (report.comments || []).map((c) => Object.assign({}, c, { authorName: nameOf_(c.author) })),
@@ -455,7 +482,7 @@ function saveReport_(report, input, user) {
   }
   let updated;
   try {
-    updated = applySave(report, input.projects, user);
+    updated = applySave(report, input.projects, user, { plan: input.plan });
   } catch (err) {
     if (err instanceof ValidationError) throw new HttpError(400, err.message);
     throw err;
@@ -505,11 +532,12 @@ function route_(method, url, body) {
 
   if (p === '/api/reports' && method === 'GET') {
     const week = requireWeek_(params.week);
-    const reports = weekReportsSorted_(week).filter((r) => canSee_(user, r)).map(present_);
+    const reports = weekReportsSorted_(week).filter((r) => canSee_(user, r)).map((r) => present_(r, user));
     const out = { week, reports };
     if (user.role === 'lead') {
       out.team = team_().users.map((m) => {
-        const r = reports.find((x) => x.author === m.email);
+        // Отчёт с одним только планом не считается заполненным.
+        const r = reports.find((x) => x.author === m.email && reportHasTasks(x));
         return Object.assign({}, m, { reportId: r ? r.id : null, updatedAt: r ? r.updatedAt : null });
       });
     }
@@ -521,7 +549,7 @@ function route_(method, url, body) {
     const find = () => allReports_().find((r) => r.author === user.email && r.week === week) || null;
     if (method === 'GET') {
       const existing = find();
-      return { report: existing ? present_(existing) : null };
+      return { report: existing ? present_(existing, user) : null };
     }
     if (method === 'PUT') {
       return withLock_(() => {
@@ -529,7 +557,7 @@ function route_(method, url, body) {
         const base = find() || {
           id: newId(), week, author: user.email, createdAt: now, version: 0, projects: [], comments: [], removedByLead: [],
         };
-        return { report: present_(saveReport_(base, body, user)) };
+        return { report: present_(saveReport_(base, body, user), user) };
       });
     }
   }
@@ -550,8 +578,8 @@ function route_(method, url, body) {
 
   let m = p.match(/^\/api\/reports\/([A-Za-z0-9_-]+)$/);
   if (m) {
-    if (method === 'GET') return { report: present_(getVisible_(user, m[1])) };
-    if (method === 'PUT') return withLock_(() => ({ report: present_(saveReport_(getVisible_(user, m[1]), body, user)) }));
+    if (method === 'GET') return { report: present_(getVisible_(user, m[1]), user) };
+    if (method === 'PUT') return withLock_(() => ({ report: present_(saveReport_(getVisible_(user, m[1]), body, user), user) }));
   }
 
   m = p.match(/^\/api\/reports\/([A-Za-z0-9_-]+)\/comments$/);
@@ -568,7 +596,7 @@ function route_(method, url, body) {
         id: newId(), taskId: task.id, taskText: task.text.slice(0, 300), author: user.email, text, createdAt: new Date().toISOString(),
       });
       writeReport_(report);
-      return { report: present_(report) };
+      return { report: present_(report, user) };
     });
   }
 
@@ -581,7 +609,7 @@ function route_(method, url, body) {
       if (comment.author !== user.email) throw new HttpError(403, 'Удалить можно только свой комментарий');
       report.comments = report.comments.filter((c) => c.id !== m[2]);
       writeReport_(report);
-      return { report: present_(report) };
+      return { report: present_(report, user) };
     });
   }
 

@@ -202,7 +202,7 @@ label.field { display: block; }
 .field__label { display: block; font-weight: 600; font-size: 0.875rem; margin-bottom: 6px; }
 .field__hint { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
 
-input[type="text"], input[type="email"], select, textarea {
+input[type="text"], input[type="email"], input[type="date"], select, textarea {
   width: 100%;
   font: inherit;
   color: var(--text);
@@ -311,6 +311,18 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
 .comment-form textarea { flex: 1; min-height: 38px; }
 
 .add-row { margin-top: 4px; }
+
+.plan { border-left: 4px solid var(--primary); }
+.plan h2 { margin-bottom: 4px; }
+.plan > p { margin: 0 0 12px; }
+.plan-row { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; }
+.plan-row textarea { flex: 1; }
+.plan-row .btn { min-height: 42px; }
+.plan-row input.plan-row__date { width: 160px; flex: none; }
+.plan-list { margin: 0; padding-left: 20px; }
+.plan-list li { margin: 4px 0; }
+.plan-list__date { color: var(--primary); font-weight: 600; font-size: 0.85rem; margin-right: 8px; }
+.editor-heading { margin: 28px 0 12px; }
 .add-project { margin-top: 20px; width: 100%; border: 2px dashed var(--border); background: transparent; color: var(--primary); padding: 14px; }
 .add-project:hover { border-color: var(--primary); background: var(--primary-soft); }
 
@@ -406,6 +418,8 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
   .lead-grid { grid-template-columns: 1fr; }
   .task__row { flex-wrap: wrap; }
   .task__row input.task__due { width: 100%; order: 3; }
+  .plan-row { flex-wrap: wrap; }
+  .plan-row input.plan-row__date { width: auto; flex: 1 1 100%; }
   .week-nav__label { min-width: 0; }
   .project, .card { padding: 14px; }
   .stream { padding-left: 10px; }
@@ -498,12 +512,12 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
   }
 
   let toastTimer = null;
-  function toast(message, kind) {
+  function toast(message, kind, durationMs) {
     toastEl.textContent = message;
     toastEl.className = kind === 'error' ? 'toast toast--error' : 'toast';
     toastEl.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toastEl.hidden = true; }, kind === 'error' ? 6000 : 3500);
+    toastTimer = setTimeout(() => { toastEl.hidden = true; }, durationMs || (kind === 'error' ? 6000 : 3500));
   }
 
   // Версия для Google Apps Script: те же запросы уходят в серверную функцию api() через google.script.run,
@@ -881,11 +895,80 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
     )));
   }
 
+  // ---------- План на неделю и календарь ----------
+
+  function emptyPlanItem() {
+    return { id: uid(), text: '', date: '' };
+  }
+
+  function planFromReport(report) {
+    const plan = report && report.plan && report.plan.length ? clone(report.plan) : [];
+    if (!plan.length) plan.push(emptyPlanItem());
+    return plan;
+  }
+
+  function formatDay(id) {
+    const d = fromId(id);
+    const days = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+    return `${days[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  }
+
+  function copyTextNow(text) {
+    // Синхронное копирование работает и внутри окна Google Apps Script, где буфер обмена бывает закрыт.
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.left = '-9999px';
+    document.body.append(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    area.remove();
+    if (!ok && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {});
+      ok = true;
+    }
+    return ok;
+  }
+
+  // Google не даёт внешним страницам создавать в календаре запись типа «Задача», поэтому копируем текст
+  // и открываем календарь на нужном дне: остаётся выбрать время, тип «Задача» и вставить название.
+  function addToCalendar(item, week) {
+    const text = item.text.trim();
+    if (!text) {
+      toast('Сначала напишите задачу', 'error');
+      return;
+    }
+    const [y, m, d] = (item.date || week).split('-').map(Number);
+    const copied = copyTextNow(text);
+    window.open(`https://calendar.google.com/calendar/r/day/${y}/${m}/${d}`, '_blank', 'noopener');
+    toast(copied
+      ? 'Текст скопирован. В календаре нажмите на время → «Задача» → вставьте название (Ctrl+V / ⌘V)'
+      : 'Календарь открыт. Нажмите на время → «Задача» и введите название', null, 8000);
+  }
+
+  function planReadonly(report, week) {
+    const list = (report.plan || []).filter((t) => t.text);
+    if (!list.length) return null;
+    return h('div', { class: 'project plan' },
+      h('h2', { text: 'План на неделю' }),
+      h('p', { class: 'muted small', text: 'Виден только вам и не попадает в общий отчёт.' }),
+      h('ul', { class: 'plan-list' }, list.map((t) => h('li', {},
+        t.date ? h('span', { class: 'plan-list__date', text: formatDay(t.date) }) : null,
+        h('span', { class: 'readonly-task', text: t.text }),
+        h('button', { type: 'button', class: 'btn btn--link btn--sm', title: 'Добавить в Google Календарь', onclick: () => addToCalendar(t, week) }, '📅 В календарь'),
+      ))),
+    );
+  }
+
   // ---------- Редактор отчёта ----------
   // ctx: { report, mode: 'own' | 'lead', saveUrl, onSaved(report), onReloaded() }
 
   function createEditor(ctx) {
     let model = modelFromReport(ctx.report);
+    // План есть только в собственном отчёте во вкладке «Райтер».
+    let plan = ctx.withPlan ? planFromReport(ctx.report) : null;
     const root = h('div', { class: 'editor' });
     const statusEl = h('span', { class: 'savebar__status' });
     const saveBtn = h('button', { type: 'button', class: 'btn btn--primary btn--lg', onclick: save }, 'Сохранить');
@@ -1105,7 +1188,9 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
         );
       });
 
-      mount(root, 
+      mount(root,
+        plan ? planBlock() : null,
+        plan ? h('h2', { class: 'editor-heading', text: 'Отчёт за неделю' }) : null,
         ...projectBlocks,
         h('button', {
           type: 'button',
@@ -1120,12 +1205,71 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
       // Фокус ставим сразу, чтобы не потерять первые нажатия; высоту полей — после отрисовки.
       if (focusAfterRender) {
         const [kind, id] = focusAfterRender.split(':');
-        const selector = { task: `[data-task="${id}"]`, stream: `[data-stream="${id}"]`, comment: `[data-comment="${id}"]` }[kind];
+        const selector = {
+          task: `[data-task="${id}"]`,
+          stream: `[data-stream="${id}"]`,
+          comment: `[data-comment="${id}"]`,
+          plan: `[data-plan="${id}"]`,
+        }[kind];
         const target = selector ? root.querySelector(selector) : [...root.querySelectorAll('select')].find((el) => el.dataset.project === id);
         if (target) target.focus();
         focusAfterRender = null;
       }
       requestAnimationFrame(() => root.querySelectorAll('textarea').forEach(autosize));
+    }
+
+    function planBlock() {
+      const [y, m, d] = ctx.week.split('-').map(Number);
+      const sunday = toId(new Date(y, m - 1, d + 6));
+      return h('section', { class: 'project plan', 'aria-label': 'План на неделю' },
+        h('h2', { text: '📅 План на неделю' }),
+        h('p', { class: 'muted small', text: 'Задачи для себя: план виден только вам и не попадает в общий отчёт. Кнопка «В календарь» копирует задачу и открывает Google Календарь на нужный день.' }),
+        plan.map((item) => h('div', { class: 'plan-row' },
+          h('input', {
+            type: 'date',
+            class: 'plan-row__date',
+            'aria-label': 'День',
+            min: ctx.week,
+            max: sunday,
+            value: item.date,
+            onchange: (e) => { item.date = e.target.value; changed(); },
+          }),
+          h('textarea', {
+            rows: '1',
+            'data-plan': item.id,
+            'aria-label': 'Запланированная задача',
+            placeholder: 'Что планируете сделать',
+            value: item.text,
+            oninput: (e) => { item.text = e.target.value; autosize(e.target); changed(); },
+          }),
+          h('button', {
+            type: 'button',
+            class: 'btn btn--sm',
+            title: 'Добавить в Google Календарь',
+            onclick: () => addToCalendar(item, ctx.week),
+          }, '📅 В календарь'),
+          h('button', {
+            type: 'button',
+            class: 'icon-btn',
+            title: 'Удалить из плана',
+            'aria-label': 'Удалить из плана',
+            onclick: () => structural(() => {
+              plan.splice(plan.indexOf(item), 1);
+              if (!plan.length) plan.push(emptyPlanItem());
+            }),
+          }, '×'),
+        )),
+        h('div', { class: 'add-row' },
+          h('button', {
+            type: 'button',
+            class: 'btn btn--link btn--sm',
+            onclick: () => {
+              const item = emptyPlanItem();
+              structural(() => plan.push(item), `plan:${item.id}`);
+            },
+          }, '+ Добавить задачу в план'),
+        ),
+      );
     }
 
     async function save() {
@@ -1141,9 +1285,14 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
       }
       saveBtn.disabled = true;
       try {
-        const data = await api('PUT', ctx.saveUrl(), { version: ctx.report ? ctx.report.version : 0, projects: modelToPayload(model) });
+        const data = await api('PUT', ctx.saveUrl(), {
+          version: ctx.report ? ctx.report.version : 0,
+          projects: modelToPayload(model),
+          plan: plan ? plan.map((t) => ({ id: t.id, text: t.text, date: t.date })) : undefined,
+        });
         ctx.report = data.report;
         model = modelFromReport(ctx.report);
+        if (plan) plan = planFromReport(ctx.report);
         setDirty(false);
         draw();
         if (ctx.onSaved) ctx.onSaved(ctx.report);
@@ -1335,6 +1484,8 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
     const ctx = {
       report: data.report,
       mode: 'own',
+      withPlan: true,
+      week,
       saveUrl: () => `/api/my-report?week=${week}`,
       onSaved: () => {},
       onReloaded: () => render(),
@@ -1479,6 +1630,8 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
     const content = [];
     if (summary) content.push(summaryCard(summary, `Общий отчёт · ${weekLabel(week)}`));
     for (const report of list.reports) {
+      // Чужой отчёт, в котором есть только личный план, тимлиду показывать нечего.
+      if (report.author !== state.user.email && !savedTaskIds(report).size) continue;
       const editRoute = report.author === state.user.email
         ? { tab: 'writer', week }
         : { tab: 'lead', week, report: report.id };
@@ -1491,6 +1644,7 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
           h('button', { type: 'button', class: 'btn', onclick: () => go(editRoute) }, 'Открыть для правки'),
         ),
         leadActivityNotice(report),
+        report.author === state.user.email ? planReadonly(report, week) : null,
         readonlyReport(report),
       );
       content.push(state.user.role === 'lead'

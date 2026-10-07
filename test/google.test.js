@@ -68,3 +68,11 @@ test('Google: доступ по ролям, правки и комментари
   assert.deepEqual(app.call('anna@example.com', 'GET', '/api/weeks').data.weeks, [{ week: WEEK, count: 1 }]);
   assert.equal(app.sheets.get('Отчёты').getLastRow(), 2, 'одна строка на отчёт');
 });
+
+test('Google: план на неделю виден только автору', () => {
+  const app = setup();
+  const r = app.call('anna@example.com', 'PUT', `/api/my-report?week=${WEEK}`, { version: 0, projects: projects(), plan: [{ text: 'Глоссарий', date: '2026-10-06' }] }).data.report;
+  assert.equal(r.plan[0].text, 'Глоссарий');
+  assert.equal(app.call('lead@example.com', 'GET', `/api/reports/${r.id}`).data.report.plan, undefined);
+  assert.doesNotMatch(app.call('lead@example.com', 'GET', `/api/summary?week=${WEEK}`).data.text, /Глоссарий/);
+});
