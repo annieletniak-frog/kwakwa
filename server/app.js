@@ -323,6 +323,8 @@ function createApp(options = {}) {
 
     m = p.match(/^\/api\/reports\/([A-Za-z0-9_-]+)\/comments$/);
     if (m && method === 'POST') {
+      // Комментарии оставляет только тимлид; райтер их видит.
+      requireLead(user);
       const report = getVisibleReport(user, m[1]);
       const body = await readBody(req);
       const task = R.findTask(report, body.taskId);

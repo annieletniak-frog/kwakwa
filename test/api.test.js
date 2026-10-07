@@ -164,7 +164,7 @@ test('райтер видит только свои отчёты, общий о�
 
     assert.equal((await boris.call('GET', `/api/reports/${id}`)).status, 404);
     assert.equal((await boris.call('PUT', `/api/reports/${id}`, { version: 1, projects: [] })).status, 404);
-    assert.equal((await boris.call('POST', `/api/reports/${id}/comments`, { taskId: 'x', text: 'hi' })).status, 404);
+    assert.equal((await boris.call('POST', `/api/reports/${id}/comments`, { taskId: 'x', text: 'hi' })).status, 403);
     assert.deepEqual((await boris.call('GET', `/api/reports?week=${WEEK}`)).data.reports, []);
     assert.equal((await boris.call('GET', `/api/summary?week=${WEEK}`)).status, 403);
     assert.deepEqual((await boris.call('GET', '/api/weeks')).data.weeks, []);
@@ -234,7 +234,9 @@ test('после перезапуска отчёты, правки, коммен
   const anna = await login(env, base, 'anna@example.com');
   const saved = (await anna.call('PUT', `/api/my-report?week=${WEEK}`, { version: 0, projects: sampleProjects() })).data.report;
   const taskId = saved.projects[0].streams[0].sections.done[0].id;
-  await anna.call('POST', `/api/reports/${saved.id}/comments`, { taskId, text: 'Заметка' });
+  assert.equal((await anna.call('POST', `/api/reports/${saved.id}/comments`, { taskId, text: 'Своя' })).status, 403, 'райтер не комментирует');
+  const lead = await login(env, base, 'lead@example.com');
+  await lead.call('POST', `/api/reports/${saved.id}/comments`, { taskId, text: 'Заметка' });
   server.close();
 
   ({ server, base } = await env.start());
