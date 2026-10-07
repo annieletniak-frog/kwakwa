@@ -29,7 +29,27 @@ const code = `${header}${reportsForGas()}\n\n${read('google/src/server.js').trim
 // вместо вечной «Загрузки…» показываем, что проверить. Чаще всего причина — несколько Google-аккаунтов в браузере.
 const LOAD_WATCHDOG = `<script>
 var otchetnikErrors = [];
-window.addEventListener('error', function (e) { otchetnikErrors.push(String(e.message || e)); });
+window.addEventListener('error', function (e) {
+  otchetnikErrors.push(String(e.message || e) + (e.lineno ? ' (строка ' + e.lineno + ':' + e.colno + ')' : ''));
+});
+function otchetnikHash(line) {
+  var h = 5381;
+  for (var i = 0; i < line.length; i += 1) h = ((h * 33) ^ line.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+function otchetnikCompare() {
+  var el = document.getElementById('main-app');
+  if (!el || !window.otchetnikLineHashes) return '| Сверка кода: основной скрипт не найден.';
+  var lines = el.textContent.replace(/^\\n/, '').split('\\n');
+  var want = window.otchetnikLineHashes;
+  for (var i = 0; i < Math.max(lines.length, want.length); i += 1) {
+    if (lines[i] === undefined) return '| Сверка кода: файл обрезан после строки ' + i + ' из ' + want.length + '.';
+    if (otchetnikHash(lines[i]) !== want[i]) {
+      return '| Сверка кода: строка ' + (i + 1) + ' отличается от оригинала: «' + lines[i].slice(0, 160) + '»';
+    }
+  }
+  return '| Сверка кода: код дошёл без изменений.';
+}
 window.addEventListener('unhandledrejection', function (e) {
   var r = e.reason; otchetnikErrors.push(String((r && (r.message || r)) || 'unhandled rejection'));
 });
@@ -37,6 +57,7 @@ setTimeout(function () {
   var app = document.getElementById('app');
   if (!app || app.textContent.trim() !== 'Загрузка…') return;
   var details = otchetnikErrors.length ? otchetnikErrors.join(' | ') : 'ошибок в браузере нет — не ответил Google';
+  details += ' ' + otchetnikCompare();
   app.innerHTML = '<div class="card"><h2>Отчётник не загрузился</h2>' +
     '<p class="notice notice--error" id="loadError"></p>' +
     '<p>Чаще всего так бывает, когда в браузере открыто несколько Google-аккаунтов. Попробуйте:</p>' +
@@ -47,14 +68,27 @@ setTimeout(function () {
 }, 15000);
 </script>`;
 
+// Хеши строк основного скрипта: если по дороге в браузер код изменился (при копировании или на стороне Google),
+// подсказка о незагрузке покажет первую отличающуюся строку.
+function lineHash(line) {
+  let h = 5381;
+  for (let i = 0; i < line.length; i += 1) h = ((h * 33) ^ line.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+function integrityScript(js) {
+  const hashes = js.split('\n').map(lineHash);
+  return `<script>var otchetnikLineHashes = ${JSON.stringify(hashes)};</script>`;
+}
+
 const page = read('public/index.html')
   .replace(/\s*<link rel="icon"[^>]*>/, '')
   .replace(/<meta name="robots"[^>]*>\s*/, '')
   .replace('<head>', '<head>\n  <base target="_top">')
   .replace(/<link rel="stylesheet" href="\/styles.css">/, () => `<style>\n${read('public/styles.css')}</style>`)
-  .replace(/<script src="\/app.js"><\/script>/, () => `${LOAD_WATCHDOG}\n<script>\n${read('public/app.js')}</script>`);
-if (/<\/script>[\s\S]*<\/script>/.test(page.replace(/<script>\n[\s\S]*?<\/script>/, ''))) {
-  throw new Error('Index.html: лишний </script> внутри кода');
+  .replace(/<script src="\/app.js"><\/script>/, () => `${LOAD_WATCHDOG}\n${integrityScript(read('public/app.js'))}\n<script id="main-app">\n${read('public/app.js')}</script>`);
+if (/<\/script/i.test(read('public/app.js'))) {
+  throw new Error('app.js содержит </script — это сломает Index.html');
 }
 
 fs.mkdirSync(path.join(root, 'google'), { recursive: true });
