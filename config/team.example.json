@@ -1,0 +1,14 @@
+{
+  "_comment": "Скопируйте в config/team.json и замените вымышленные адреса реальными после согласования. Роли: writer, lead. Роль designer зарезервирована и пока не даёт доступа.",
+  "allowedDomains": ["example.com"],
+  "projects": ["{brand} Main", "WL", "Side Project", "W.tv", "CDP", "Landings"],
+  "users": [
+    { "email": "lead@example.com", "name": "Мира Тимлидова", "role": "lead" },
+    { "email": "anna@example.com", "name": "Анна Словарёва", "role": "writer" },
+    { "email": "boris@example.com", "name": "Борис Буквин", "role": "writer" },
+    { "email": "vera@example.com", "name": "Вера Тексткова", "role": "writer" },
+    { "email": "gleb@example.com", "name": "Глеб Фразин", "role": "writer" },
+    { "email": "dina@example.com", "name": "Дина Строкина", "role": "writer" },
+    { "email": "egor@example.com", "name": "Егор Абзацев", "role": "writer" }
+  ]
+}
