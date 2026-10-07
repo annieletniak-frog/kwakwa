@@ -23,7 +23,7 @@ function reportsForGas() {
 }
 
 const header = '// Отчётник — версия для Google Apps Script. Файл собран автоматически (npm run build:google), не редактируйте вручную.\n\n';
-const code = `${header}${reportsForGas()}\n\n${read('google/src/server.js').trim()}\n`;
+const code = `${header}${reportsForGas()}\n\n${read('google/src/server.js').trim()}\n\n${read('google/src/slack.js').trim()}\n`;
 
 const page = read('public/index.html')
   .replace(/\s*<link rel="icon"[^>]*>/, '')

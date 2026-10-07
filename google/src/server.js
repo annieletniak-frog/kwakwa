@@ -56,6 +56,7 @@ function ensureSheets_() {
     sh.getRange(1, 1, 1, 5).setValues([['ID', 'Неделя', 'Автор', 'Обновлён', 'Данные (не редактировать)']]).setFontWeight('bold');
     sh.setFrozenRows(1);
   }
+  ensureSettingsSheet_();
 }
 
 function sheetRows_(name) {
@@ -227,7 +228,7 @@ function route_(method, url, body) {
   const user = currentUser_();
 
   if (p === '/api/config') return { devMail: false };
-  if (p === '/api/me' && method === 'GET') return { user, projects: team_().projects };
+  if (p === '/api/me' && method === 'GET') return { user, projects: team_().projects, slack: slackConfigured_() };
 
   if (p === '/api/weeks' && method === 'GET') {
     const weeks = new Map();
@@ -245,7 +246,11 @@ function route_(method, url, body) {
       out.team = team_().users.map((m) => {
         // Отчёт с одним только планом не считается заполненным.
         const r = reports.find((x) => x.author === m.email && reportHasTasks(x));
-        return Object.assign({}, m, { reportId: r ? r.id : null, updatedAt: r ? r.updatedAt : null });
+        return Object.assign({}, m, {
+          reportId: r ? r.id : null,
+          updatedAt: r ? r.updatedAt : null,
+          notifiedAt: r && r.reviewNotified ? r.reviewNotified.at : null,
+        });
       });
     }
     return out;
@@ -304,6 +309,20 @@ function route_(method, url, body) {
       });
       writeReport_(report);
       return { report: present_(report, user) };
+    });
+  }
+
+  m = p.match(/^\/api\/reports\/([A-Za-z0-9_-]+)\/notify$/);
+  if (m && method === 'POST') {
+    if (user.role !== 'lead') throw new HttpError(403, 'Доступно только тимлиду');
+    if (!slackConfigured_()) throw new HttpError(400, 'Slack не настроен: на листе «Настройки» нет токена бота');
+    const report = getVisible_(user, m[1]);
+    const result = notifyWriter_(report, user);
+    return withLock_(() => {
+      const fresh = getVisible_(user, m[1]);
+      fresh.reviewNotified = { at: result.at, by: result.by };
+      writeReport_(fresh);
+      return { report: present_(fresh, user), warnings: result.warnings };
     });
   }
 

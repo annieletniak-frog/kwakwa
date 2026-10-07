@@ -366,6 +366,8 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
 .summary-preview p { margin: 8px 0 2px; }
 .summary-preview ul { margin: 2px 0 6px; padding-left: 22px; }
 
+.notify-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+
 .split-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 
 /* ---------- Просмотр (только чтение) ---------- */

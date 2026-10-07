@@ -1,0 +1,23 @@
+{
+  "display_information": {
+    "name": "Отчётник",
+    "description": "Напоминания о еженедельных отчётах UX-райтеров",
+    "background_color": "#3b6fd8"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Отчётник",
+      "always_online": false
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": ["chat:write", "chat:write.public", "users:read", "users:read.email"]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

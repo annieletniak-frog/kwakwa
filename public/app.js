@@ -1080,6 +1080,41 @@
     );
   }
 
+  // Отбивка райтеру в Slack: тимлид отправляет её сам, когда закончил проверку отчёта.
+  function notifyBlock(report) {
+    const sent = report.reviewNotified;
+    const btn = h('button', {
+      type: 'button',
+      class: sent ? 'btn' : 'btn btn--primary',
+      onclick: async () => {
+        if (state.dirty) {
+          toast('Сначала сохраните правки — райтер должен увидеть их по ссылке', 'error');
+          return;
+        }
+        if (!window.confirm(`Отправить ${report.authorName} отбивку в Slack?`)) return;
+        btn.disabled = true;
+        try {
+          const data = await api('POST', `/api/reports/${report.id}/notify`, {});
+          const extra = data.warnings && data.warnings.length ? ` Обратите внимание: ${data.warnings.join('; ')}.` : '';
+          toast(`Отбивка отправлена в Slack.${extra}`, null, extra ? 9000 : 3500);
+          render();
+        } catch (err) {
+          toast(err.message, 'error', 9000);
+          btn.disabled = false;
+        }
+      },
+    }, sent ? '📣 Отправить отбивку ещё раз' : '📣 Проверено — отправить отбивку в Slack');
+    return h('div', { class: 'notify-row' },
+      btn,
+      h('span', {
+        class: 'muted small',
+        text: sent
+          ? `Отбивка отправлена ${formatDateTime(sent.at)}`
+          : 'Райтер получит сообщение с тегом в треде четвергового напоминания',
+      }),
+    );
+  }
+
   // ---------- Вкладка «Тимлид» ----------
 
   async function renderLead(token) {
@@ -1108,7 +1143,12 @@
         h('span', { class: `status-dot${m.reportId ? ' status-dot--ok' : ''}`, 'aria-hidden': 'true' }),
         h('span', {},
           h('span', { class: 'team-item__name', text: m.name }),
-          h('span', { class: 'team-item__sub', text: m.reportId ? `Обновлён ${formatDateTime(m.updatedAt)}` : 'Отчёт не заполнен' }),
+          h('span', {
+            class: 'team-item__sub',
+            text: m.reportId
+              ? `Обновлён ${formatDateTime(m.updatedAt)}${m.notifiedAt ? ' · отбивка отправлена' : ''}`
+              : 'Отчёт не заполнен',
+          }),
         )),
       ))),
       selected
@@ -1137,6 +1177,7 @@
             ),
             h('button', { type: 'button', class: 'btn', onclick: () => go({ tab: 'lead', week }) }, 'К общему отчёту'),
           ),
+          state.slack && selected.author !== state.user.email ? notifyBlock(selected) : null,
         ),
         removedList(selected),
         orphanComments(selected),
@@ -1249,11 +1290,28 @@
     }
   }
 
+  // Ссылка из Slack открывает приложение с ?week=…; в Google параметры адреса читаются через google.script.url.
+  function applyStartParams() {
+    return new Promise((resolve) => {
+      if (location.hash || !(window.google.script.url && window.google.script.url.getLocation)) {
+        resolve();
+        return;
+      }
+      window.google.script.url.getLocation((loc) => {
+        const week = loc && loc.parameter && loc.parameter.week;
+        if (isWeekId(week)) history.replaceState(null, '', hashFor({ tab: 'writer', week }));
+        resolve();
+      });
+    });
+  }
+
   async function boot() {
     try {
       const me = await api('GET', '/api/me');
       state.user = me.user;
       state.projects = me.projects;
+      state.slack = Boolean(me.slack);
+      if (GAS) await applyStartParams();
       await render();
     } catch (err) {
       if (err.status === 401 && !GAS) renderLogin();
