@@ -25,18 +25,26 @@ function reportsForGas() {
 const header = '// Отчётник — версия для Google Apps Script. Файл собран автоматически (npm run build:google), не редактируйте вручную.\n\n';
 const code = `${header}${reportsForGas()}\n\n${read('google/src/server.js').trim()}\n\n${read('google/src/slack.js').trim()}\n`;
 
-// Отдельный маленький скрипт: если основной код не запустился или Google не ответил, через 20 секунд
+// Отдельный маленький скрипт: если основной код не запустился или Google не ответил, через 15 секунд
 // вместо вечной «Загрузки…» показываем, что проверить. Чаще всего причина — несколько Google-аккаунтов в браузере.
 const LOAD_WATCHDOG = `<script>
+var otchetnikErrors = [];
+window.addEventListener('error', function (e) { otchetnikErrors.push(String(e.message || e)); });
+window.addEventListener('unhandledrejection', function (e) {
+  var r = e.reason; otchetnikErrors.push(String((r && (r.message || r)) || 'unhandled rejection'));
+});
 setTimeout(function () {
   var app = document.getElementById('app');
   if (!app || app.textContent.trim() !== 'Загрузка…') return;
+  var details = otchetnikErrors.length ? otchetnikErrors.join(' | ') : 'ошибок в браузере нет — не ответил Google';
   app.innerHTML = '<div class="card"><h2>Отчётник не загрузился</h2>' +
+    '<p class="notice notice--error" id="loadError"></p>' +
     '<p>Чаще всего так бывает, когда в браузере открыто несколько Google-аккаунтов. Попробуйте:</p>' +
     '<ol><li>Открыть ссылку в окне инкогнито (Ctrl+Shift+N, на Mac ⌘+Shift+N) и войти только рабочим аккаунтом.</li>' +
     '<li>Или выйти из личного Google-аккаунта в этом браузере, либо завести для работы отдельный профиль Chrome.</li></ol>' +
     '<p>Если не помогло — сообщите тимлиду: возможно, приложение нужно заново разрешить после обновления.</p></div>';
-}, 20000);
+  document.getElementById('loadError').textContent = 'Техническая причина: ' + details;
+}, 15000);
 </script>`;
 
 const page = read('public/index.html')

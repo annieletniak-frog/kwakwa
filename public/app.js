@@ -1297,11 +1297,23 @@
         resolve();
         return;
       }
-      window.google.script.url.getLocation((loc) => {
-        const week = loc && loc.parameter && loc.parameter.week;
-        if (isWeekId(week)) history.replaceState(null, '', hashFor({ tab: 'writer', week }));
+      // Что бы ни случилось с getLocation, запуск приложения не должен зависнуть: максимум через 3 секунды идём дальше.
+      const timer = setTimeout(resolve, 3000);
+      try {
+        window.google.script.url.getLocation((loc) => {
+          try {
+            const week = loc && loc.parameter && loc.parameter.week;
+            if (isWeekId(week)) location.hash = hashFor({ tab: 'writer', week });
+          } catch (e) {
+            /* без недели из ссылки откроется текущая */
+          }
+          clearTimeout(timer);
+          resolve();
+        });
+      } catch (e) {
+        clearTimeout(timer);
         resolve();
-      });
+      }
     });
   }
 

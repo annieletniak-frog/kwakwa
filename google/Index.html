@@ -457,15 +457,23 @@ textarea { resize: vertical; min-height: 42px; line-height: 1.45; }
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script>
+var otchetnikErrors = [];
+window.addEventListener('error', function (e) { otchetnikErrors.push(String(e.message || e)); });
+window.addEventListener('unhandledrejection', function (e) {
+  var r = e.reason; otchetnikErrors.push(String((r && (r.message || r)) || 'unhandled rejection'));
+});
 setTimeout(function () {
   var app = document.getElementById('app');
   if (!app || app.textContent.trim() !== 'Загрузка…') return;
+  var details = otchetnikErrors.length ? otchetnikErrors.join(' | ') : 'ошибок в браузере нет — не ответил Google';
   app.innerHTML = '<div class="card"><h2>Отчётник не загрузился</h2>' +
+    '<p class="notice notice--error" id="loadError"></p>' +
     '<p>Чаще всего так бывает, когда в браузере открыто несколько Google-аккаунтов. Попробуйте:</p>' +
     '<ol><li>Открыть ссылку в окне инкогнито (Ctrl+Shift+N, на Mac ⌘+Shift+N) и войти только рабочим аккаунтом.</li>' +
     '<li>Или выйти из личного Google-аккаунта в этом браузере, либо завести для работы отдельный профиль Chrome.</li></ol>' +
     '<p>Если не помогло — сообщите тимлиду: возможно, приложение нужно заново разрешить после обновления.</p></div>';
-}, 20000);
+  document.getElementById('loadError').textContent = 'Техническая причина: ' + details;
+}, 15000);
 </script>
 <script>
 (() => {
@@ -1767,11 +1775,23 @@ setTimeout(function () {
         resolve();
         return;
       }
-      window.google.script.url.getLocation((loc) => {
-        const week = loc && loc.parameter && loc.parameter.week;
-        if (isWeekId(week)) history.replaceState(null, '', hashFor({ tab: 'writer', week }));
+      // Что бы ни случилось с getLocation, запуск приложения не должен зависнуть: максимум через 3 секунды идём дальше.
+      const timer = setTimeout(resolve, 3000);
+      try {
+        window.google.script.url.getLocation((loc) => {
+          try {
+            const week = loc && loc.parameter && loc.parameter.week;
+            if (isWeekId(week)) location.hash = hashFor({ tab: 'writer', week });
+          } catch (e) {
+            /* без недели из ссылки откроется текущая */
+          }
+          clearTimeout(timer);
+          resolve();
+        });
+      } catch (e) {
+        clearTimeout(timer);
         resolve();
-      });
+      }
     });
   }
 

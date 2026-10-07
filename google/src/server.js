@@ -215,7 +215,9 @@ function api(method, url, body) {
   teamCache = null;
   reportsCache = null;
   try {
-    return { status: 200, data: route_(method, url, body || {}) };
+    // google.script.run передаёт в браузер не любые значения (например, undefined и даты могут сорвать ответ),
+    // поэтому отдаём строго JSON-совместимые данные.
+    return JSON.parse(JSON.stringify({ status: 200, data: route_(method, url, body || {}) }));
   } catch (err) {
     if (err instanceof HttpError) return { status: err.status, error: err.message };
     console.error(err && err.stack ? err.stack : err);
