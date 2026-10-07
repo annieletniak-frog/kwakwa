@@ -139,12 +139,3 @@ test('Slack: райтер не найден и напоминания не бы�
   assert.equal(reply.thread_ts, undefined);
   assert.match(reply.text, /^Борис, тимлид посмотрел твой отчёт — спасибо!/);
 });
-
-test('Google: комментарии оставляет только тимлид', () => {
-  const app = setup();
-  const r = app.call('anna@example.com', 'PUT', `/api/my-report?week=${WEEK}`, { version: 0, projects: projects() }).data.report;
-  const taskId = r.projects[0].streams[0].sections.done[0].id;
-  assert.equal(app.call('anna@example.com', 'POST', `/api/reports/${r.id}/comments`, { taskId, text: 'Хочу ответить' }).status, 403);
-  assert.equal(app.call('lead@example.com', 'POST', `/api/reports/${r.id}/comments`, { taskId, text: 'Ок' }).status, 200);
-  assert.equal(app.call('anna@example.com', 'GET', '/api/my-report?week=' + WEEK).data.report.comments[0].text, 'Ок');
-});

@@ -643,8 +643,7 @@
         },
       }, '×');
 
-      // Комментировать может только тимлид; райтер видит комментарии под задачами.
-      const canComment = state.user.role === 'lead' && ctx.report && saved.has(task.id);
+      const canComment = ctx.report && saved.has(task.id);
       const isOpen = openComment.has(task.id);
       const commentBtn = canComment
         ? h('button', {

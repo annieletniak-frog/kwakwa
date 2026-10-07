@@ -298,8 +298,6 @@ function route_(method, url, body) {
 
   m = p.match(/^\/api\/reports\/([A-Za-z0-9_-]+)\/comments$/);
   if (m && method === 'POST') {
-    // Комментарии оставляет только тимлид; райтер их видит.
-    if (user.role !== 'lead') throw new HttpError(403, 'Комментарии оставляет только тимлид');
     return withLock_(() => {
       const report = getVisible_(user, m[1]);
       const task = findTask(report, body.taskId);
