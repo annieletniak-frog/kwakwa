@@ -1,18 +1,23 @@
 {
   "display_information": {
-    "name": "Отчётник",
-    "description": "Напоминания о еженедельных отчётах UX-райтеров",
+    "name": "Otchetnik",
+    "description": "Weekly report reminders for UX writers",
     "background_color": "#3b6fd8"
   },
   "features": {
     "bot_user": {
-      "display_name": "Отчётник",
+      "display_name": "otchetnik",
       "always_online": false
     }
   },
   "oauth_config": {
     "scopes": {
-      "bot": ["chat:write", "chat:write.public", "users:read", "users:read.email"]
+      "bot": [
+        "chat:write",
+        "chat:write.public",
+        "users:read",
+        "users:read.email"
+      ]
     }
   },
   "settings": {
