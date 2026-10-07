@@ -336,3 +336,21 @@ test('при удалении задачи её комментарии исче�
     server.close();
   }
 });
+
+test('комментарии не попадают в общий отчёт', async () => {
+  const env = setup();
+  const { server, base } = await env.start();
+  try {
+    const anna = await login(env, base, 'anna@example.com');
+    const lead = await login(env, base, 'lead@example.com');
+    const report = (await anna.call('PUT', `/api/my-report?week=${WEEK}`, { version: 0, projects: sampleProjects() })).data.report;
+    const taskId = report.projects[0].streams[0].sections.done[0].id;
+    await lead.call('POST', `/api/reports/${report.id}/comments`, { taskId, text: 'Комментарий тимлида' });
+    await anna.call('POST', `/api/reports/${report.id}/comments`, { taskId, text: 'Ответ райтера' });
+    const summary = (await lead.call('GET', `/api/summary?week=${WEEK}`)).data;
+    assert.match(summary.text, /Тексты онбординга/);
+    assert.doesNotMatch(summary.text + summary.html, /Комментарий тимлида|Ответ райтера/);
+  } finally {
+    server.close();
+  }
+});
