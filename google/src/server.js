@@ -6,7 +6,8 @@ const SHEET_TEAM = 'Команда';
 const SHEET_PROJECTS = 'Проекты';
 const SHEET_REPORTS = 'Отчёты';
 const DEFAULT_PROJECTS = ['{brand} Main', 'WL', 'Side Project', 'W.tv', 'CDP', 'Landings'];
-const ROLE_ALIASES = { 'тимлид': 'lead', lead: 'lead', 'райтер': 'writer', writer: 'writer' };
+// «участник» — то же, что «райтер»: удобнее для других отделов, которые запускают свою копию.
+const ROLE_ALIASES = { 'тимлид': 'lead', lead: 'lead', 'райтер': 'writer', 'участник': 'writer', writer: 'writer' };
 const MAX_CELL = 49000;
 
 // Публичная, но безвредная: нужна общей логике отчётов (takeId).
@@ -38,7 +39,7 @@ function ensureSheets_() {
   if (!ss.getSheetByName(SHEET_TEAM)) {
     const sh = ss.insertSheet(SHEET_TEAM);
     const owner = Session.getEffectiveUser().getEmail();
-    sh.getRange(1, 1, 1, 3).setValues([['Почта', 'Имя', 'Роль (райтер или тимлид)']]).setFontWeight('bold');
+    sh.getRange(1, 1, 1, 3).setValues([['Почта', 'Имя', 'Роль (участник или тимлид)']]).setFontWeight('bold');
     sh.getRange(2, 1, 1, 3).setValues([[owner, 'Тимлид', 'тимлид']]);
     sh.setColumnWidth(1, 260);
     sh.setColumnWidth(2, 220);

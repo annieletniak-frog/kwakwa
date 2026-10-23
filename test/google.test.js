@@ -177,3 +177,9 @@ test('Google: в старый лист «Настройки» дописываю
   assert.equal(names.filter((n) => n === 'Slack: ID канала').length, 1);
   assert.equal(sh.cells.find((r) => r[0] === 'Slack: ID канала')[1], 'C052UCY0KME');
 });
+
+test('Google: роль «участник» работает как «райтер»', () => {
+  const app = setup();
+  app.sheets.get('Команда').appendRow(['dasha@example.com', 'Даша', 'Участник']);
+  assert.equal(app.call('dasha@example.com', 'GET', '/api/me').data.user.role, 'writer');
+});
