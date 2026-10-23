@@ -262,11 +262,35 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-const SUMMARY_TITLE = '🔹 UX Writers';
+// Подсказка «Как заполнять отчет» по умолчанию (команда UX-райтеров). В Google-версии её можно
+// поменять на листе «Подсказка», а пустой лист её скрывает.
+const DEFAULT_GUIDE = {
+  rules: [
+    'Заполняйте коротко, без воды и лишних слов.',
+    'Добавляйте только те задачи, которые готовы на этой неделе. Если что-то было закрыто на прошлой, не добавляйте это в новый отчет.',
+    'Не указывайте в отчете мелкие и несущественные задачи (например, изменили одну строку в модалке или проверили мелкий баннер).',
+    'В завершенных задачах указывайте, что согласовано бизнесом, что передано в локализацию, что передано в разработку. Это и есть польза бизнесу.',
+    'Если указываете задачи в работе — отмечайте ближайшую веху. Если вы не понимаете тайминг, не добавляйте задачу в отчет. Можете добавить ее в план, чтобы не забыть.',
+    'Важные встречи и обсуждения — это те встречи, где вы что-то инициировали, меняли и договаривались. Не добавляйте туда синки, брифинги и встречи, где вы что-то уточняете.',
+  ],
+  good: [
+    ['Готово', 'проработали 2 блокера (просмотр в апп и плавающий плеер, плеер отдельно обсуждали с разработкой и бизнесом), собрали аудиторию по исследованию клипов и ход исследования, спланировали финализацию аудита'],
+    ['Блокеры', 'нет / задача по ревью ключей по итогам аудита ждет финала со стороны дизайнеров'],
+    ['Что в работе', 'передаю дела Леше до 15.10'],
+  ],
+  bad: [
+    ['Готово', 'Обсуждали с дизайнерами идеи, как показывать плавающий плеер внутри сайта, приложения. У нас были разногласия с тимлидом и бизнесом: бизнес хотел светящийся плеер, дизайнеры — компактный, а я говорил, что так не работает. В итоге приняли решение провести рисерч и забрифовали команду Димы. От меня было 19 вопросов, и еще я брифовал команду исследований. Передано в работу, свою задачу закрываю до следующего изменения.'],
+    ['Блокеры', 'CPO не возвращается с правками по аудиту, дергал 100 раз, пока молчит, на следующей неделе напишу еще раз.'],
+    ['Что в работе', 'жду, когда придет бриф на разработку новогодней акции, чтобы приступить к ней'],
+  ],
+};
+
+const DEFAULT_TEAM_NAME = 'UX Writers';
+const SUMMARY_TITLE = `🔹 ${DEFAULT_TEAM_NAME}`;
 
 // HTML для вставки в Confluence: заголовки проектов и стримов, подзаголовки разделов, маркированные списки.
-function summaryToHtml(tree) {
-  const out = [`<h2>${escapeHtml(SUMMARY_TITLE)}</h2>`];
+function summaryToHtml(tree, title = SUMMARY_TITLE) {
+  const out = [`<h2>${escapeHtml(title)}</h2>`];
   for (const p of tree) {
     out.push(`<h3>${escapeHtml(p.project)}</h3>`);
     for (const s of p.streams) {
@@ -281,8 +305,8 @@ function summaryToHtml(tree) {
   return out.join('\n');
 }
 
-function summaryToText(tree) {
-  const out = [SUMMARY_TITLE];
+function summaryToText(tree, title = SUMMARY_TITLE) {
+  const out = [title];
   for (const p of tree) {
     out.push('', p.project);
     for (const s of p.streams) {
@@ -357,6 +381,41 @@ function ensureSheets_() {
     sh.setFrozenRows(1);
   }
   ensureSettingsSheet_();
+  ensureGuideSheet_();
+}
+
+// ---------- Подсказка «Как заполнять отчет» на листе «Подсказка» ----------
+// Строки: тип («правило», «крутой», «не крутой»), раздел (для примеров), текст. Пустой лист — подсказки нет.
+const SHEET_GUIDE = 'Подсказка';
+
+function ensureGuideSheet_() {
+  const ss = book_();
+  if (ss.getSheetByName(SHEET_GUIDE)) return;
+  const sh = ss.insertSheet(SHEET_GUIDE);
+  const rows = [['Тип (правило, крутой, не крутой)', 'Раздел (для примеров)', 'Текст']]
+    .concat(DEFAULT_GUIDE.rules.map((t) => ['правило', '', t]))
+    .concat(DEFAULT_GUIDE.good.map(([label, t]) => ['крутой', label, t]))
+    .concat(DEFAULT_GUIDE.bad.map(([label, t]) => ['не крутой', label, t]));
+  sh.getRange(1, 1, rows.length, 3).setValues(rows);
+  sh.getRange(1, 1, 1, 3).setFontWeight('bold');
+  sh.setColumnWidth(1, 220);
+  sh.setColumnWidth(2, 160);
+  sh.setColumnWidth(3, 700);
+  sh.setFrozenRows(1);
+}
+
+function guide_() {
+  const out = { rules: [], good: [], bad: [] };
+  for (const row of sheetRows_(SHEET_GUIDE)) {
+    const type = String(row[0] || '').trim().toLowerCase();
+    const label = String(row[1] || '').trim();
+    const text = String(row[2] || '').trim();
+    if (!text) continue;
+    if (type === 'правило') out.rules.push(text);
+    else if (type === 'крутой') out.good.push([label, text]);
+    else if (type === 'не крутой') out.bad.push([label, text]);
+  }
+  return out;
 }
 
 function sheetRows_(name) {
@@ -531,7 +590,14 @@ function route_(method, url, body) {
 
   if (p === '/api/config') return { devMail: false };
   if (p === '/api/me' && method === 'GET') {
-    return { user, projects: team_().projects, slack: slackConfigured_(), appUrl: user.role === 'lead' ? appUrl_() : null };
+    return {
+      user,
+      projects: team_().projects,
+      teamName: teamName_(),
+      guide: guide_(),
+      slack: slackConfigured_(),
+      appUrl: user.role === 'lead' ? appUrl_() : null,
+    };
   }
 
   if (p === '/api/weeks' && method === 'GET') {
@@ -587,8 +653,8 @@ function route_(method, url, body) {
       week,
       reportCount: reports.length,
       tree,
-      html: tree.length ? summaryToHtml(tree) : '',
-      text: tree.length ? summaryToText(tree) : '',
+      html: tree.length ? summaryToHtml(tree, `🔹 ${teamName_()}`) : '',
+      text: tree.length ? summaryToText(tree, `🔹 ${teamName_()}`) : '',
     };
   }
 
@@ -656,25 +722,41 @@ const SETTING_TOKEN = 'Slack: токен бота';
 const SETTING_CHANNEL = 'Slack: ID канала';
 const SETTING_HOUR = 'Напоминание по четвергам: час (0–23)';
 const SETTING_URL = 'Ссылка на приложение';
-const DEFAULT_CHANNEL = 'C052UCY0KME';
+const SETTING_TEAM = 'Название команды';
 const REMINDER_TEXT = '<!channel>, четверг пришел, а значит время похвастаться успехами! {link} ждет вас, красавчики 🩶';
 
+const SETTINGS_ROWS = [
+  [SETTING_TOKEN, '', 'Начинается с xoxb-. Как получить — в инструкции, раздел про Slack'],
+  [SETTING_CHANNEL, '', 'ID канала для напоминаний и отбивок (в Slack: канал → название → внизу Channel ID)'],
+  [SETTING_HOUR, 11, 'По часовому поясу скрипта; после изменения снова запустите setupSlack'],
+  [SETTING_URL, '', 'Можно не заполнять: подставится адрес приложения'],
+  [SETTING_TEAM, DEFAULT_TEAM_NAME, 'Показывается в шапке и в заголовке общего отчёта'],
+];
+
+// Создаёт лист «Настройки», а в старый лист дописывает параметры, появившиеся в новых версиях.
 function ensureSettingsSheet_() {
   const ss = book_();
-  if (ss.getSheetByName(SHEET_SETTINGS)) return;
-  const sh = ss.insertSheet(SHEET_SETTINGS);
-  sh.getRange(1, 1, 5, 3).setValues([
-    ['Параметр', 'Значение', 'Пояснение'],
-    [SETTING_TOKEN, '', 'Начинается с xoxb-. Как получить — в инструкции, раздел про Slack'],
-    [SETTING_CHANNEL, DEFAULT_CHANNEL, 'Канал для напоминаний и отбивок'],
-    [SETTING_HOUR, 11, 'По часовому поясу скрипта; после изменения снова запустите setupSlack'],
-    [SETTING_URL, '', 'Можно не заполнять: подставится адрес приложения'],
-  ]);
-  sh.getRange(1, 1, 1, 3).setFontWeight('bold');
-  sh.setColumnWidth(1, 320);
-  sh.setColumnWidth(2, 260);
-  sh.setColumnWidth(3, 480);
-  sh.setFrozenRows(1);
+  let sh = ss.getSheetByName(SHEET_SETTINGS);
+  if (!sh) {
+    sh = ss.insertSheet(SHEET_SETTINGS);
+    sh.getRange(1, 1, 1, 3).setValues([['Параметр', 'Значение', 'Пояснение']]).setFontWeight('bold');
+    sh.setColumnWidth(1, 320);
+    sh.setColumnWidth(2, 260);
+    sh.setColumnWidth(3, 480);
+    sh.setFrozenRows(1);
+  }
+  const existing = new Set(sheetRows_(SHEET_SETTINGS).map((r) => String(r[0]).trim()));
+  for (const row of SETTINGS_ROWS) if (!existing.has(row[0])) sh.appendRow(row);
+}
+
+function teamName_() {
+  return setting_(SETTING_TEAM) || DEFAULT_TEAM_NAME;
+}
+
+function slackChannel_() {
+  const channel = setting_(SETTING_CHANNEL);
+  if (!channel) throw new HttpError(400, 'Slack: на листе «Настройки» не указан ID канала');
+  return channel;
 }
 
 function setting_(name) {
@@ -775,7 +857,7 @@ function sendThursdayReminder() {
     return;
   }
   const data = slackCall_('chat.postMessage', {
-    channel: setting_(SETTING_CHANNEL) || DEFAULT_CHANNEL,
+    channel: slackChannel_(),
     text: REMINDER_TEXT.replace('{link}', weekLink_(week)),
     unfurl_links: false,
   });
@@ -815,7 +897,7 @@ function notifyWriter_(report, lead) {
     ? `${mention}, тимлид посмотрел твой отчёт и оставил комментарии (${leadComments}) — загляни в ${weekLink_(report.week)} 🩶`
     : `${mention}, тимлид посмотрел твой отчёт — спасибо! Он в ${weekLink_(report.week)} 🩶`;
   const threadTs = PropertiesService.getScriptProperties().getProperty(threadKey_(report.week));
-  const payload = { channel: setting_(SETTING_CHANNEL) || DEFAULT_CHANNEL, text, unfurl_links: false };
+  const payload = { channel: slackChannel_(), text, unfurl_links: false };
   if (threadTs) payload.thread_ts = threadTs;
   const data = slackCall_('chat.postMessage', payload);
   if (!data.ok) throw new HttpError(502, `Slack не принял отбивку: ${slackErrorText_(data.error)}`);

@@ -246,7 +246,7 @@ function createApp(options = {}) {
     const user = requireUser(req);
 
     if (p === '/api/me' && method === 'GET') {
-      return send(res, 200, { user, projects: team.projects() });
+      return send(res, 200, { user, projects: team.projects(), teamName: R.DEFAULT_TEAM_NAME, guide: R.DEFAULT_GUIDE });
     }
 
     if (p === '/api/weeks' && method === 'GET') {

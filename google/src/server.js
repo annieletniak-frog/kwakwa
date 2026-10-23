@@ -57,6 +57,41 @@ function ensureSheets_() {
     sh.setFrozenRows(1);
   }
   ensureSettingsSheet_();
+  ensureGuideSheet_();
+}
+
+// ---------- Подсказка «Как заполнять отчет» на листе «Подсказка» ----------
+// Строки: тип («правило», «крутой», «не крутой»), раздел (для примеров), текст. Пустой лист — подсказки нет.
+const SHEET_GUIDE = 'Подсказка';
+
+function ensureGuideSheet_() {
+  const ss = book_();
+  if (ss.getSheetByName(SHEET_GUIDE)) return;
+  const sh = ss.insertSheet(SHEET_GUIDE);
+  const rows = [['Тип (правило, крутой, не крутой)', 'Раздел (для примеров)', 'Текст']]
+    .concat(DEFAULT_GUIDE.rules.map((t) => ['правило', '', t]))
+    .concat(DEFAULT_GUIDE.good.map(([label, t]) => ['крутой', label, t]))
+    .concat(DEFAULT_GUIDE.bad.map(([label, t]) => ['не крутой', label, t]));
+  sh.getRange(1, 1, rows.length, 3).setValues(rows);
+  sh.getRange(1, 1, 1, 3).setFontWeight('bold');
+  sh.setColumnWidth(1, 220);
+  sh.setColumnWidth(2, 160);
+  sh.setColumnWidth(3, 700);
+  sh.setFrozenRows(1);
+}
+
+function guide_() {
+  const out = { rules: [], good: [], bad: [] };
+  for (const row of sheetRows_(SHEET_GUIDE)) {
+    const type = String(row[0] || '').trim().toLowerCase();
+    const label = String(row[1] || '').trim();
+    const text = String(row[2] || '').trim();
+    if (!text) continue;
+    if (type === 'правило') out.rules.push(text);
+    else if (type === 'крутой') out.good.push([label, text]);
+    else if (type === 'не крутой') out.bad.push([label, text]);
+  }
+  return out;
 }
 
 function sheetRows_(name) {
@@ -231,7 +266,14 @@ function route_(method, url, body) {
 
   if (p === '/api/config') return { devMail: false };
   if (p === '/api/me' && method === 'GET') {
-    return { user, projects: team_().projects, slack: slackConfigured_(), appUrl: user.role === 'lead' ? appUrl_() : null };
+    return {
+      user,
+      projects: team_().projects,
+      teamName: teamName_(),
+      guide: guide_(),
+      slack: slackConfigured_(),
+      appUrl: user.role === 'lead' ? appUrl_() : null,
+    };
   }
 
   if (p === '/api/weeks' && method === 'GET') {
@@ -287,8 +329,8 @@ function route_(method, url, body) {
       week,
       reportCount: reports.length,
       tree,
-      html: tree.length ? summaryToHtml(tree) : '',
-      text: tree.length ? summaryToText(tree) : '',
+      html: tree.length ? summaryToHtml(tree, `🔹 ${teamName_()}`) : '',
+      text: tree.length ? summaryToText(tree, `🔹 ${teamName_()}`) : '',
     };
   }
 

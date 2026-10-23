@@ -84,7 +84,7 @@ function setSetting(app, name, value) {
 
 test('Slack: без токена ничего не отправляется, кнопки отбивки нет', () => {
   const app = setup();
-  assert.equal(app.sheets.get('Настройки').get(3, 2), 'C052UCY0KME');
+  assert.equal(app.sheets.get('Настройки').get(3, 2), '', 'в новых копиях канал не задан заранее');
   assert.equal(app.call('lead@example.com', 'GET', '/api/me').data.slack, false);
   app.run('lead@example.com', 'sendThursdayReminder');
   assert.equal(app.slack.calls.length, 0);
@@ -93,6 +93,7 @@ test('Slack: без токена ничего не отправляется, к�
 test('Slack: напоминание по четвергам, отбивка в тред с тегом райтера', () => {
   const app = setup();
   setSetting(app, 'Slack: токен бота', 'xoxb-test');
+  setSetting(app, 'Slack: ID канала', 'C052UCY0KME');
   setSetting(app, 'Напоминание по четвергам: час (0–23)', 10);
   app.slack.users['anna@example.com'] = 'UANNA';
 
@@ -132,10 +133,47 @@ test('Slack: райтер не найден и напоминания не бы�
   const app = setup();
   setSetting(app, 'Slack: токен бота', 'xoxb-test');
   const report = app.call('boris@example.com', 'PUT', `/api/my-report?week=${WEEK}`, { version: 0, projects: projects() }).data.report;
+  assert.match(app.call('lead@example.com', 'POST', `/api/reports/${report.id}/notify`, {}).error, /не указан ID канала/);
+  setSetting(app, 'Slack: ID канала', 'C052UCY0KME');
   const res = app.call('lead@example.com', 'POST', `/api/reports/${report.id}/notify`, {});
   assert.equal(res.status, 200);
   assert.equal(res.data.warnings.length, 2);
   const reply = app.slack.calls.find((c) => c.method === 'chat.postMessage').payload;
   assert.equal(reply.thread_ts, undefined);
   assert.match(reply.text, /^Борис, тимлид посмотрел твой отчёт — спасибо!/);
+});
+
+test('Google: название команды и подсказка настраиваются в таблице', () => {
+  const app = setup();
+  const me = app.call('lead@example.com', 'GET', '/api/me').data;
+  assert.equal(me.teamName, 'UX Writers');
+  assert.equal(me.guide.rules.length, 6);
+  assert.equal(me.guide.good[0][0], 'Готово');
+
+  setSetting(app, 'Название команды', 'Продуктовые дизайнеры');
+  app.call('anna@example.com', 'PUT', `/api/my-report?week=${WEEK}`, { version: 0, projects: projects() });
+  const summary = app.call('lead@example.com', 'GET', `/api/summary?week=${WEEK}`).data;
+  assert.match(summary.html, /^<h2>🔹 Продуктовые дизайнеры<\/h2>/);
+  assert.match(summary.text, /^🔹 Продуктовые дизайнеры\n/);
+
+  // Очистили лист «Подсказка» (оставили заголовок) — подсказки нет.
+  const guide = app.sheets.get('Подсказка');
+  guide.cells = guide.cells.slice(0, 1);
+  guide.appendRow(['правило', '', 'Пишите по делу']);
+  assert.deepEqual(app.call('anna@example.com', 'GET', '/api/me').data.guide, { rules: ['Пишите по делу'], good: [], bad: [] });
+  guide.cells = guide.cells.slice(0, 1);
+  assert.deepEqual(app.call('anna@example.com', 'GET', '/api/me').data.guide, { rules: [], good: [], bad: [] });
+});
+
+test('Google: в старый лист «Настройки» дописываются новые параметры, заполненные значения не трогаются', () => {
+  const app = setup();
+  const sh = app.sheets.get('Настройки');
+  // Как в таблице, созданной прошлой версией: без строки «Название команды», канал уже указан.
+  sh.cells = sh.cells.filter((r) => r[0] !== 'Название команды');
+  setSetting(app, 'Slack: ID канала', 'C052UCY0KME');
+  app.doGet();
+  const names = sh.cells.map((r) => r[0]);
+  assert.ok(names.includes('Название команды'));
+  assert.equal(names.filter((n) => n === 'Slack: ID канала').length, 1);
+  assert.equal(sh.cells.find((r) => r[0] === 'Slack: ID канала')[1], 'C052UCY0KME');
 });

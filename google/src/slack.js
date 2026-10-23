@@ -8,25 +8,41 @@ const SETTING_TOKEN = 'Slack: токен бота';
 const SETTING_CHANNEL = 'Slack: ID канала';
 const SETTING_HOUR = 'Напоминание по четвергам: час (0–23)';
 const SETTING_URL = 'Ссылка на приложение';
-const DEFAULT_CHANNEL = 'C052UCY0KME';
+const SETTING_TEAM = 'Название команды';
 const REMINDER_TEXT = '<!channel>, четверг пришел, а значит время похвастаться успехами! {link} ждет вас, красавчики 🩶';
 
+const SETTINGS_ROWS = [
+  [SETTING_TOKEN, '', 'Начинается с xoxb-. Как получить — в инструкции, раздел про Slack'],
+  [SETTING_CHANNEL, '', 'ID канала для напоминаний и отбивок (в Slack: канал → название → внизу Channel ID)'],
+  [SETTING_HOUR, 11, 'По часовому поясу скрипта; после изменения снова запустите setupSlack'],
+  [SETTING_URL, '', 'Можно не заполнять: подставится адрес приложения'],
+  [SETTING_TEAM, DEFAULT_TEAM_NAME, 'Показывается в шапке и в заголовке общего отчёта'],
+];
+
+// Создаёт лист «Настройки», а в старый лист дописывает параметры, появившиеся в новых версиях.
 function ensureSettingsSheet_() {
   const ss = book_();
-  if (ss.getSheetByName(SHEET_SETTINGS)) return;
-  const sh = ss.insertSheet(SHEET_SETTINGS);
-  sh.getRange(1, 1, 5, 3).setValues([
-    ['Параметр', 'Значение', 'Пояснение'],
-    [SETTING_TOKEN, '', 'Начинается с xoxb-. Как получить — в инструкции, раздел про Slack'],
-    [SETTING_CHANNEL, DEFAULT_CHANNEL, 'Канал для напоминаний и отбивок'],
-    [SETTING_HOUR, 11, 'По часовому поясу скрипта; после изменения снова запустите setupSlack'],
-    [SETTING_URL, '', 'Можно не заполнять: подставится адрес приложения'],
-  ]);
-  sh.getRange(1, 1, 1, 3).setFontWeight('bold');
-  sh.setColumnWidth(1, 320);
-  sh.setColumnWidth(2, 260);
-  sh.setColumnWidth(3, 480);
-  sh.setFrozenRows(1);
+  let sh = ss.getSheetByName(SHEET_SETTINGS);
+  if (!sh) {
+    sh = ss.insertSheet(SHEET_SETTINGS);
+    sh.getRange(1, 1, 1, 3).setValues([['Параметр', 'Значение', 'Пояснение']]).setFontWeight('bold');
+    sh.setColumnWidth(1, 320);
+    sh.setColumnWidth(2, 260);
+    sh.setColumnWidth(3, 480);
+    sh.setFrozenRows(1);
+  }
+  const existing = new Set(sheetRows_(SHEET_SETTINGS).map((r) => String(r[0]).trim()));
+  for (const row of SETTINGS_ROWS) if (!existing.has(row[0])) sh.appendRow(row);
+}
+
+function teamName_() {
+  return setting_(SETTING_TEAM) || DEFAULT_TEAM_NAME;
+}
+
+function slackChannel_() {
+  const channel = setting_(SETTING_CHANNEL);
+  if (!channel) throw new HttpError(400, 'Slack: на листе «Настройки» не указан ID канала');
+  return channel;
 }
 
 function setting_(name) {
@@ -127,7 +143,7 @@ function sendThursdayReminder() {
     return;
   }
   const data = slackCall_('chat.postMessage', {
-    channel: setting_(SETTING_CHANNEL) || DEFAULT_CHANNEL,
+    channel: slackChannel_(),
     text: REMINDER_TEXT.replace('{link}', weekLink_(week)),
     unfurl_links: false,
   });
@@ -167,7 +183,7 @@ function notifyWriter_(report, lead) {
     ? `${mention}, тимлид посмотрел твой отчёт и оставил комментарии (${leadComments}) — загляни в ${weekLink_(report.week)} 🩶`
     : `${mention}, тимлид посмотрел твой отчёт — спасибо! Он в ${weekLink_(report.week)} 🩶`;
   const threadTs = PropertiesService.getScriptProperties().getProperty(threadKey_(report.week));
-  const payload = { channel: setting_(SETTING_CHANNEL) || DEFAULT_CHANNEL, text, unfurl_links: false };
+  const payload = { channel: slackChannel_(), text, unfurl_links: false };
   if (threadTs) payload.thread_ts = threadTs;
   const data = slackCall_('chat.postMessage', payload);
   if (!data.ok) throw new HttpError(502, `Slack не принял отбивку: ${slackErrorText_(data.error)}`);
